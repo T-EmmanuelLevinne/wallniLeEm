@@ -55,6 +55,20 @@
     ];
     const validation = isValidWallPlacement(boxWalls[3], boxWalls.slice(0, 3), [{ pos: { r: 0, c: 5 } }]);
     assert(validation.valid === false, "Complete trap rejected: BFS detects player trapped at (0, 5)");
+
+    // Test 6: Blocking path to yellow goal (5, 5) completely
+    const goalRingWalls = [
+      { r: 4, c: 4, orientation: 'H' },
+      { r: 4, c: 5, orientation: 'H' },
+      { r: 5, c: 4, orientation: 'H' },
+      { r: 5, c: 5, orientation: 'H' },
+      { r: 4, c: 4, orientation: 'V' },
+      { r: 5, c: 4, orientation: 'V' },
+      { r: 4, c: 5, orientation: 'V' }
+    ];
+    const closingWall = { r: 5, c: 5, orientation: 'V' };
+    const goalCheck = isValidWallPlacement(closingWall, goalRingWalls, [{ pos: { r: 0, c: 5 } }, { pos: { r: 10, c: 5 } }]);
+    assert(goalCheck.valid === false, "Yellow goal protection: Wall that closes all paths to (5, 5) is rejected");
   </script>
 </body>
 </html>

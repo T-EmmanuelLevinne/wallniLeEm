@@ -129,8 +129,9 @@ function isValidWallPlacement(proposedWall, existingWalls, playerPositions) {
 
   // 3. Test BFS path to goal for ALL active players
   for (const p of playerPositions) {
+    if (!p || !p.pos) continue;
     if (!hasPathToGoal(p.pos, simulatedWalls)) {
-      return { valid: false, reason: 'Path to goal must stay open for all players!' };
+      return { valid: false, reason: 'Path to yellow center goal must stay open for all players!' };
     }
   }
 

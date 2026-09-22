@@ -25,7 +25,6 @@ document.addEventListener('DOMContentLoaded', () => {
     name: 'Player 1',
     color: 'green',
     hex: '#2ecc71',
-    wallsLeft: 10,
     isReady: false
   };
 
@@ -49,6 +48,8 @@ document.addEventListener('DOMContentLoaded', () => {
     hoverR: -1,
     hoverC: -1
   };
+
+  let currentActionMode = 'MOVE'; // 'MOVE' or 'WALL'
 
   // --------------------------------------------------------------------------
   // DOM Element References & Toast System
@@ -78,7 +79,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const boardGrid = document.getElementById('board-grid');
   const turnLabel = document.getElementById('turn-label');
   const turnDot = document.getElementById('current-turn-dot');
-  const wallsCountVal = document.getElementById('walls-count-val');
+  const btnModeMove = document.getElementById('btn-mode-move');
+  const btnModeWall = document.getElementById('btn-mode-wall');
+  const btnRotateWall = document.getElementById('btn-rotate-wall');
 
   const modalVictory = document.getElementById('modal-victory');
   const winnerTitle = document.getElementById('winner-title');
@@ -474,7 +477,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
-      p.wallsLeft = 10;
     });
 
     roomState.currentTurnIndex = 0;
@@ -486,9 +488,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --------------------------------------------------------------------------
-  // 11x11 Game Engine & Rendering
+  // 11x11 Game Engine & Action Mode Controls
   // --------------------------------------------------------------------------
   function launchActiveGame() {
+    currentActionMode = 'MOVE';
     showScreen(screens.game);
     renderBoardState();
   }
@@ -505,6 +508,90 @@ document.addEventListener('DOMContentLoaded', () => {
       { r: 10, c: 8 }   // Bottom-Right
     ];
     return presets.slice(0, numPlayers);
+  }
+
+  function setActionMode(mode) {
+    currentActionMode = mode;
+    if (mode === 'MOVE') {
+      if (btnModeMove) btnModeMove.classList.add('active');
+      if (btnModeWall) btnModeWall.classList.remove('active');
+      if (btnRotateWall) btnRotateWall.style.display = 'none';
+      document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+      
+      const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id);
+      if (isMyTurn) {
+        showMoveHighlights();
+      }
+    } else {
+      if (btnModeWall) btnModeWall.classList.add('active');
+      if (btnModeMove) btnModeMove.classList.remove('active');
+      if (btnRotateWall) {
+        btnRotateWall.style.display = 'inline-block';
+        btnRotateWall.textContent = `Rotate (${wallPlacementState.orientation})`;
+      }
+      clearMoveHighlights();
+    }
+  }
+
+  if (btnModeMove) btnModeMove.addEventListener('click', () => setActionMode('MOVE'));
+  if (btnModeWall) btnModeWall.addEventListener('click', () => setActionMode('WALL'));
+  if (btnRotateWall) {
+    btnRotateWall.addEventListener('click', () => {
+      toggleWallOrientation();
+    });
+  }
+
+  function toggleWallOrientation() {
+    wallPlacementState.orientation = (wallPlacementState.orientation === 'H') ? 'V' : 'H';
+    if (btnRotateWall) {
+      btnRotateWall.textContent = `Rotate (${wallPlacementState.orientation})`;
+    }
+    if (currentActionMode === 'WALL' && wallPlacementState.hoverR >= 0 && wallPlacementState.hoverC >= 0) {
+      renderWallPreview(wallPlacementState.hoverR, wallPlacementState.hoverC);
+    }
+  }
+
+  function clearMoveHighlights() {
+    boardGrid.querySelectorAll('.highlighted-move').forEach(el => {
+      el.classList.remove('highlighted-move');
+    });
+  }
+
+  function showMoveHighlights() {
+    clearMoveHighlights();
+
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos) {
+      return;
+    }
+
+    const currPos = activePlayer.pos;
+    const directions = [
+      { dr: -1, dc: 0 }, // Up
+      { dr: 1, dc: 0 },  // Down
+      { dr: 0, dc: -1 }, // Left
+      { dr: 0, dc: 1 }   // Right
+    ];
+
+    directions.forEach(d => {
+      const nr = currPos.r + d.dr;
+      const nc = currPos.c + d.dc;
+
+      // Check within board bounds
+      if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
+        // Check if movement is not blocked by a wall
+        if (!isMoveBlocked(currPos.r, currPos.c, nr, nc, roomState.walls)) {
+          // Check cell not occupied by another player
+          const isOccupied = roomState.players.some(p => p.pos && p.pos.r === nr && p.pos.c === nc);
+          if (!isOccupied) {
+            const cell = getCellElem(nr, nc);
+            if (cell) {
+              cell.classList.add('highlighted-move');
+            }
+          }
+        }
+      }
+    });
   }
 
   function renderBoardState() {
@@ -531,18 +618,41 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id);
+
     roomState.players.forEach(p => {
       if (!p.pos) return;
       const cell = getCellElem(p.pos.r, p.pos.c);
       if (cell) {
         const marble = document.createElement('div');
         marble.className = `marble-sphere marble-${p.color}`;
+        
+        const isMe = (p.id === playerProfile.id);
+        if (isMe) {
+          if (isMyTurn) {
+            marble.classList.add('selected-player');
+          }
+          // Clicking the player's circle directly activates Move mode and highlights reachable squares in blue
+          marble.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (!isMyTurn) return;
+            setActionMode('MOVE');
+            showMoveHighlights();
+          });
+        }
+
         cell.appendChild(marble);
       }
     });
 
     renderPlacedWallsUI();
     updateTurnHeaderUI();
+
+    if (isMyTurn && currentActionMode === 'MOVE') {
+      showMoveHighlights();
+    } else {
+      clearMoveHighlights();
+    }
   }
 
   function renderPlacedWallsUI() {
@@ -578,9 +688,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     turnLabel.textContent = `${activePlayer.name}'s Turn`;
     turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
-
-    const me = roomState.players.find(p => p.id === playerProfile.id);
-    wallsCountVal.textContent = me ? me.wallsLeft : 10;
   }
 
   // --------------------------------------------------------------------------
@@ -592,47 +699,54 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    const currPos = activePlayer.pos;
-    const dr = Math.abs(r - currPos.r);
-    const dc = Math.abs(c - currPos.c);
+    // MODE 1: Move Marble
+    if (currentActionMode === 'MOVE') {
+      const currPos = activePlayer.pos;
+      const dr = Math.abs(r - currPos.r);
+      const dc = Math.abs(c - currPos.c);
+      const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+      const cellElem = getCellElem(r, c);
+      const isHighlighted = cellElem?.classList.contains('highlighted-move');
 
-    // 1. Move Marble Action
-    if ((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
-      if (!isMoveBlocked(currPos.r, currPos.c, r, c, roomState.walls)) {
+      if (isHighlighted || (isAdjacent && !isMoveBlocked(currPos.r, currPos.c, r, c, roomState.walls) && !roomState.players.some(p => p.pos && p.pos.r === r && p.pos.c === c))) {
         activePlayer.pos = { r, c };
-        
+        clearMoveHighlights();
+
+        const nextTurnIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
+
         broadcastEvent('player_move', {
           playerId: playerProfile.id,
           pos: { r, c },
-          nextTurnIndex: (roomState.currentTurnIndex + 1) % roomState.players.length
+          nextTurnIndex: nextTurnIndex
         });
 
-        advanceTurn((roomState.currentTurnIndex + 1) % roomState.players.length);
+        advanceTurn(nextTurnIndex);
         renderBoardState();
 
         if (r === GOAL_POS.r && c === GOAL_POS.c) {
           triggerVictory(activePlayer);
         }
-        return;
       }
+      return;
     }
 
-    // 2. Place Wall Action
-    if (activePlayer.wallsLeft > 0) {
-      const proposedWall = { r: Math.min(r, GRID_SIZE - 2), c: Math.min(c, GRID_SIZE - 2), orientation: wallPlacementState.orientation };
+    // MODE 2: Place Wall
+    if (currentActionMode === 'WALL') {
+      const wallR = Math.min(r, GRID_SIZE - 2);
+      const wallC = Math.min(c, GRID_SIZE - 2);
+      const proposedWall = { r: wallR, c: wallC, orientation: wallPlacementState.orientation };
       const playerPositions = roomState.players.map(p => ({ id: p.id, pos: p.pos }));
 
       const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
 
       if (check.valid) {
         roomState.walls.push(proposedWall);
-        activePlayer.wallsLeft--;
+        document.querySelectorAll('.wall-preview').forEach(el => el.remove());
 
         const nextIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
 
         broadcastEvent('wall_placed', {
           wall: proposedWall,
-          wallsLeft: activePlayer.wallsLeft,
           nextTurnIndex: nextIndex
         });
 
@@ -647,6 +761,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleCellHover(r, c) {
+    if (currentActionMode !== 'WALL') return;
     wallPlacementState.hoverR = r;
     wallPlacementState.hoverC = c;
     renderWallPreview(r, c);
@@ -654,17 +769,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
-      wallPlacementState.orientation = (wallPlacementState.orientation === 'H') ? 'V' : 'H';
-      renderWallPreview(wallPlacementState.hoverR, wallPlacementState.hoverC);
+      toggleWallOrientation();
     }
   });
 
   function renderWallPreview(r, c) {
     document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+    if (currentActionMode !== 'WALL') return;
     if (r < 0 || c < 0) return;
 
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.wallsLeft <= 0) return;
+    if (!activePlayer || activePlayer.id !== playerProfile.id) return;
 
     const wallR = Math.min(r, GRID_SIZE - 2);
     const wallC = Math.min(c, GRID_SIZE - 2);
@@ -716,10 +831,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleRemoteWall(data) {
     roomState.walls.push(data.wall);
-    const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (activePlayer) {
-      activePlayer.wallsLeft = data.wallsLeft;
-    }
     advanceTurn(data.nextTurnIndex);
     renderBoardState();
   }
@@ -742,7 +853,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length);
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
-      p.wallsLeft = 10;
     });
 
     roomState.walls = [];

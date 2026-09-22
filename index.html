@@ -155,8 +155,10 @@
           <div id="current-turn-dot" class="turn-dot turn-pulse marble-green"></div>
           <span id="turn-label">Player 1's Turn</span>
         </div>
-        <div class="wall-count-badge">
-          Walls Remaining: <strong id="walls-count-val" style="color: #fff;">10</strong>
+        <div class="action-mode-selector">
+          <button id="btn-mode-move" class="mode-tab-btn active">Move</button>
+          <button id="btn-mode-wall" class="mode-tab-btn">Place Wall</button>
+          <button id="btn-rotate-wall" class="mode-tab-btn rotate-btn" style="display: none;">Rotate (H)</button>
         </div>
       </div>
 
@@ -169,9 +171,8 @@
 
       <!-- Controls Hint Banner -->
       <div class="controls-hint">
-        <span><span class="key-cap">Click Cell</span> Move Marble</span>
+        <span><span class="key-cap">Click Marble</span> Show Move Targets</span>
         <span><span class="key-cap">R</span> / <span class="key-cap">E</span> Rotate Wall</span>
-        <span><span class="key-cap">Hover</span> Preview Wall</span>
       </div>
     </div>
   </div>
