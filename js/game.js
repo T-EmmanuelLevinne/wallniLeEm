@@ -25,7 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
     name: 'Player 1',
     color: 'green',
     hex: '#2ecc71',
-    wallsLeft: 10
+    wallsLeft: 10,
+    isReady: false
   };
 
   let roomState = {
@@ -72,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const lobbyPlayersList = document.getElementById('lobby-players-list');
   const lobbyColorPicker = document.getElementById('lobby-color-picker');
   const btnStartGame = document.getElementById('btn-start-game');
+  const btnReadyToggle = document.getElementById('btn-ready-toggle');
   
   const boardGrid = document.getElementById('board-grid');
   const turnLabel = document.getElementById('turn-label');
@@ -229,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
               joiningPlayer.color = avail.color;
               joiningPlayer.hex = avail.hex;
             }
+            joiningPlayer.isReady = false;
             roomState.players.push(joiningPlayer);
           }
           broadcastEvent('room_sync', roomState);
@@ -242,11 +245,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
         roomState = syncedRoomState;
         
-        // Update local playerProfile if host assigned a new unique color
+        // Update local playerProfile if host assigned a new unique color or ready status
         const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
         if (meInRoom) {
           playerProfile.color = meInRoom.color;
           playerProfile.hex = meInRoom.hex;
+          playerProfile.isReady = !!meInRoom.isReady;
         }
 
         renderLobbySlotsUI();
@@ -259,6 +263,16 @@ document.addEventListener('DOMContentLoaded', () => {
           p.hex = data.hex;
           renderLobbySlotsUI();
           renderLobbyColorPickerUI();
+        }
+      },
+      onPlayerReadyChanged: (data) => {
+        const p = roomState.players.find(pl => pl.id === data.playerId);
+        if (p) {
+          p.isReady = data.isReady;
+          renderLobbySlotsUI();
+          if (isHost) {
+            broadcastEvent('room_sync', roomState);
+          }
         }
       },
       onGameStarted: (startedState) => {
@@ -374,10 +388,20 @@ document.addEventListener('DOMContentLoaded', () => {
       if (p) {
         const isPlayerHost = (p.id === roomState.hostId || i === 0);
         const isMe = (p.id === playerProfile.id);
+
+        let badgeHTML = '';
+        if (isPlayerHost) {
+          badgeHTML = '<span class="player-slot-badge">Host</span>';
+        } else {
+          badgeHTML = p.isReady
+            ? '<span class="player-slot-badge ready">Ready</span>'
+            : '<span class="player-slot-badge not-ready">Not Ready</span>';
+        }
+
         slot.innerHTML = `
           <div class="player-slot-marble marble-${p.color}"></div>
           <span class="player-slot-name">${escapeHTML(p.name)} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
-          ${isPlayerHost ? '<span class="player-slot-badge">Host</span>' : ''}
+          ${badgeHTML}
         `;
       } else {
         slot.innerHTML = `
@@ -390,11 +414,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const meIsHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
-    if (meIsHost && roomState.players.length >= 2) {
-      btnStartGame.removeAttribute('disabled');
+
+    if (meIsHost) {
+      btnStartGame.style.display = 'flex';
+      if (btnReadyToggle) btnReadyToggle.style.display = 'none';
+
+      // Start Game requires: at least 2 players AND all non-host members are Ready
+      const nonHostMembers = roomState.players.slice(1);
+      const allMembersReady = nonHostMembers.length > 0 && nonHostMembers.every(m => m.isReady);
+
+      if (roomState.players.length >= 2 && allMembersReady) {
+        btnStartGame.removeAttribute('disabled');
+      } else {
+        btnStartGame.setAttribute('disabled', 'true');
+      }
     } else {
-      btnStartGame.setAttribute('disabled', 'true');
+      btnStartGame.style.display = 'none';
+      if (btnReadyToggle) {
+        btnReadyToggle.style.display = 'flex';
+        
+        const mySlot = roomState.players.find(p => p.id === playerProfile.id);
+        const amReady = mySlot ? mySlot.isReady : playerProfile.isReady;
+
+        if (amReady) {
+          btnReadyToggle.textContent = 'Cancel Ready';
+          btnReadyToggle.classList.add('btn-ready-active');
+        } else {
+          btnReadyToggle.textContent = 'Ready';
+          btnReadyToggle.classList.remove('btn-ready-active');
+        }
+      }
     }
+  }
+
+  // Member Clicks Ready Toggle
+  if (btnReadyToggle) {
+    btnReadyToggle.addEventListener('click', () => {
+      playerProfile.isReady = !playerProfile.isReady;
+
+      const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+      if (meInRoom) {
+        meInRoom.isReady = playerProfile.isReady;
+      }
+
+      broadcastEvent('player_ready_changed', {
+        playerId: playerProfile.id,
+        isReady: playerProfile.isReady
+      });
+
+      renderLobbySlotsUI();
+    });
   }
 
   // Host Clicks Start Game

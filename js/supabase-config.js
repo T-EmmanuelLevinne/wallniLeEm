@@ -57,6 +57,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'player_color_changed' }, ({ payload }) => {
       if (callbacks.onPlayerColorChanged) callbacks.onPlayerColorChanged(payload);
     })
+    .on('broadcast', { event: 'player_ready_changed' }, ({ payload }) => {
+      if (callbacks.onPlayerReadyChanged) callbacks.onPlayerReadyChanged(payload);
+    })
     .on('broadcast', { event: 'player_move' }, ({ payload }) => {
       if (callbacks.onPlayerMove) callbacks.onPlayerMove(payload);
     })
@@ -97,6 +100,7 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'room_join_request' && callbacks.onRoomJoinRequest) callbacks.onRoomJoinRequest(payload);
     if (type === 'room_sync' && callbacks.onRoomSync) callbacks.onRoomSync(payload);
     if (type === 'player_color_changed' && callbacks.onPlayerColorChanged) callbacks.onPlayerColorChanged(payload);
+    if (type === 'player_ready_changed' && callbacks.onPlayerReadyChanged) callbacks.onPlayerReadyChanged(payload);
     if (type === 'player_move' && callbacks.onPlayerMove) callbacks.onPlayerMove(payload);
     if (type === 'wall_placed' && callbacks.onWallPlaced) callbacks.onWallPlaced(payload);
     if (type === 'game_started' && callbacks.onGameStarted) callbacks.onGameStarted(payload);
