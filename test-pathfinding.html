@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BFS Pathfinding Unit Tests - WallRush 11x11</title>
+  <style>
+    body { font-family: monospace; background: #0f172a; color: #f8fafc; padding: 2rem; }
+    .pass { color: #4ade80; font-weight: bold; }
+    .fail { color: #f87171; font-weight: bold; }
+    .test-case { margin-bottom: 0.5rem; background: rgba(255,255,255,0.05); padding: 0.5rem 1rem; border-radius: 6px; }
+  </style>
+</head>
+<body>
+  <h1>WallRush 11x11 BFS Pathfinding Engine - Test Results</h1>
+  <div id="results">Running tests...</div>
+
+  <script src="js/pathfinding.js"></script>
+  <script>
+    const resultsContainer = document.getElementById('results');
+    resultsContainer.innerHTML = '';
+
+    function assert(condition, message) {
+      const div = document.createElement('div');
+      div.className = 'test-case';
+      div.innerHTML = condition ? `<span class="pass">[PASS]</span> ${message}` : `<span class="fail">[FAIL]</span> ${message}`;
+      resultsContainer.appendChild(div);
+      console.assert(condition, message);
+    }
+
+    // Test 1: Clear path from outer spawn (0, 5) to goal (5, 5)
+    assert(hasPathToGoal({ r: 0, c: 5 }, []), "Open board: Player at (0, 5) has path to goal (5, 5)");
+
+    // Test 2: Clear path from outer spawn (10, 5) to goal (5, 5)
+    assert(hasPathToGoal({ r: 10, c: 5 }, []), "Open board: Player at (10, 5) has path to goal (5, 5)");
+
+    // Test 3: Partial walls (should still pass if alternate route exists around walls)
+    const partialWalls = [
+      { r: 4, c: 4, orientation: 'H' },
+      { r: 4, c: 5, orientation: 'H' }
+    ];
+    assert(hasPathToGoal({ r: 0, c: 5 }, partialWalls), "Partial walls: Alternate path around horizontal wall exists");
+
+    // Test 4: Wall overlap detection
+    const existingWalls = [{ r: 2, c: 2, orientation: 'H' }];
+    assert(isWallOverlapping({ r: 2, c: 2, orientation: 'H' }, existingWalls) === true, "Wall overlap: Same position rejected");
+    assert(isWallOverlapping({ r: 2, c: 3, orientation: 'H' }, existingWalls) === true, "Wall overlap: Parallel overlap rejected");
+    assert(isWallOverlapping({ r: 5, c: 5, orientation: 'V' }, existingWalls) === false, "Wall overlap: Valid non-overlapping wall accepted");
+
+    // Test 5: Fully boxing in a player (should fail validation!)
+    const boxWalls = [
+      { r: 0, c: 4, orientation: 'V' }, // Left of (0, 5)
+      { r: 0, c: 5, orientation: 'V' }, // Right of (0, 5)
+      { r: 0, c: 4, orientation: 'H' }, // Below (0, 5) left
+      { r: 0, c: 5, orientation: 'H' }  // Below (0, 5) right
+    ];
+    const validation = isValidWallPlacement(boxWalls[3], boxWalls.slice(0, 3), [{ pos: { r: 0, c: 5 } }]);
+    assert(validation.valid === false, "Complete trap rejected: BFS detects player trapped at (0, 5)");
+  </script>
+</body>
+</html>

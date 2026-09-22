@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WallRush - 11x11 Realtime Multiplayer Board Game</title>
+  <meta name="description" content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
+  
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+  
+  <!-- Supabase JS CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Canvas Confetti CDN for Victory Celebration -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+</head>
+<body>
+
+  <!-- UI Toast Notification Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- =========================================================================
+       SCREEN 1: 6-DIGIT INVITATION CODE
+       ========================================================================= -->
+  <div id="screen-invite" class="screen active">
+    <div class="glass-card">
+      <h1 class="title-glow">WALLRUSH</h1>
+      <p class="subtitle">Enter 6-digit access code to enter the arena</p>
+      
+      <div class="input-group">
+        <label for="invite-code">Invitation Code</label>
+        <input type="text" id="invite-code" class="input-field code-input" maxlength="6" value="784921" placeholder="784921">
+      </div>
+
+      <button id="btn-submit-invite" class="btn-primary">
+        <span>Enter Game</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCREEN 2: PLAYER PROFILE & MENU
+       ========================================================================= -->
+  <div id="screen-profile" class="screen">
+    <div class="glass-card">
+      <h2 class="title-glow">Player Profile</h2>
+      <p class="subtitle">Choose your display name to start</p>
+
+      <div class="input-group">
+        <label for="player-name">Your Name</label>
+        <input type="text" id="player-name" class="input-field" placeholder="Player 1" maxlength="15">
+      </div>
+
+      <button id="btn-nav-create" class="btn-primary">Create New Lobby</button>
+      <button id="btn-nav-join" class="btn-secondary">Join Lobby by Code</button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCREEN 3: CREATE LOBBY
+       ========================================================================= -->
+  <div id="screen-create-lobby" class="screen">
+    <div class="glass-card">
+      <h2 class="title-glow">Create Lobby</h2>
+      <p class="subtitle">Select maximum players for this match</p>
+
+      <div class="input-group">
+        <label for="max-players-select">Max Players (2 - 8)</label>
+        <select id="max-players-select" class="input-field">
+          <option value="2">2 Players</option>
+          <option value="3">3 Players</option>
+          <option value="4" selected>4 Players</option>
+          <option value="5">5 Players</option>
+          <option value="6">6 Players</option>
+          <option value="7">7 Players</option>
+          <option value="8">8 Players</option>
+        </select>
+      </div>
+
+      <button id="btn-confirm-create" class="btn-primary">Create Room</button>
+      <button id="btn-back-profile-1" class="btn-secondary">Back</button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCREEN 4: JOIN LOBBY
+       ========================================================================= -->
+  <div id="screen-join-lobby" class="screen">
+    <div class="glass-card">
+      <h2 class="title-glow">Join Lobby</h2>
+      <p class="subtitle">Enter 6-character room code</p>
+
+      <div class="input-group">
+        <label for="join-room-code">Room Code</label>
+        <input type="text" id="join-room-code" class="input-field code-input" maxlength="6" placeholder="X7K2P9">
+      </div>
+
+      <button id="btn-confirm-join" class="btn-primary">Join Room</button>
+      <button id="btn-back-profile-2" class="btn-secondary">Back</button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCREEN 5: WAITING LOBBY ROOM (With Color Picker Inside)
+       ========================================================================= -->
+  <div id="screen-lobby-room" class="screen">
+    <div class="glass-card">
+      <h2 class="title-glow">Waiting Room</h2>
+      <p class="subtitle">Share code or link with friends</p>
+
+      <div class="lobby-code-box">
+        <div>
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; text-transform: uppercase;">Room Code</span>
+          <span id="display-room-code" class="lobby-code-val">------</span>
+        </div>
+        <button id="btn-copy-link" class="btn-icon">Copy Invite Link</button>
+      </div>
+
+      <!-- Color Selector Inside Lobby -->
+      <div class="input-group">
+        <label>Your Marble Color (Unique Per Player)</label>
+        <div class="color-picker-grid" id="lobby-color-picker">
+          <div class="color-option marble-green" data-color="green" data-hex="#2ecc71"></div>
+          <div class="color-option marble-blue" data-color="blue" data-hex="#3498db"></div>
+          <div class="color-option marble-red" data-color="red" data-hex="#e74c3c"></div>
+          <div class="color-option marble-amber" data-color="amber" data-hex="#f39c12"></div>
+          <div class="color-option marble-purple" data-color="purple" data-hex="#9b59b6"></div>
+          <div class="color-option marble-cyan" data-color="cyan" data-hex="#1abc9c"></div>
+          <div class="color-option marble-orange" data-color="orange" data-hex="#e67e22"></div>
+          <div class="color-option marble-pink" data-color="pink" data-hex="#fd79a8"></div>
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label>Connected Players (<span id="player-count-label">1</span>/<span id="max-players-label">4</span>)</label>
+        <div id="lobby-players-list" class="players-list">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <button id="btn-start-game" class="btn-primary" disabled>Start Game</button>
+      <button id="btn-leave-lobby" class="btn-secondary">Leave Lobby</button>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SCREEN 6: ACTIVE MATCH (11x11 Grid Board matching screenshot UI)
+       ========================================================================= -->
+  <div id="screen-game" class="screen">
+    <div class="game-layout">
+      <!-- Game Top Status Header -->
+      <div class="game-header">
+        <div class="turn-indicator">
+          <div id="current-turn-dot" class="turn-dot turn-pulse marble-green"></div>
+          <span id="turn-label">Player 1's Turn</span>
+        </div>
+        <div class="wall-count-badge">
+          Walls Remaining: <strong id="walls-count-val" style="color: #fff;">10</strong>
+        </div>
+      </div>
+
+      <!-- Metallic Outer Frame & Glowing 11x11 Board Container -->
+      <div class="board-container">
+        <div id="board-grid" class="board-glowing-inner">
+          <!-- 11x11 = 121 cells populated dynamically by game.js -->
+        </div>
+      </div>
+
+      <!-- Controls Hint Banner -->
+      <div class="controls-hint">
+        <span><span class="key-cap">Click Cell</span> Move Marble</span>
+        <span><span class="key-cap">R</span> / <span class="key-cap">E</span> Rotate Wall</span>
+        <span><span class="key-cap">Hover</span> Preview Wall</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       VICTORY MODAL & CONFETTI OVERLAY
+       ========================================================================= -->
+  <div id="modal-victory" class="modal-overlay">
+    <div class="glass-card victory-card">
+      <div class="victory-header-badge">VICTORY</div>
+      <h2 id="winner-title" class="title-glow">Victory!</h2>
+      <p id="winner-subtitle" class="subtitle">Player 1 reached the golden center goal!</p>
+
+      <button id="btn-play-again" class="btn-primary">Play Again</button>
+      <button id="btn-exit-game" class="btn-secondary">Exit to Main Menu</button>
+    </div>
+  </div>
+
+  <!-- Canvas for Confetti -->
+  <canvas id="confetti-canvas"></canvas>
+
+  <!-- JS Game Engines -->
+  <script src="js/supabase-config.js"></script>
+  <script src="js/pathfinding.js"></script>
+  <script src="js/game.js"></script>
+</body>
+</html>
