@@ -29,7 +29,10 @@
       
       <div class="input-group">
         <label for="invite-code">Invitation Code</label>
-        <input type="text" id="invite-code" class="input-field code-input" maxlength="6" value="784921" placeholder="784921">
+        <div style="position: relative; display: flex; align-items: center;">
+          <input type="password" id="invite-code" class="input-field code-input" maxlength="6" placeholder="••••••" autocomplete="off" style="padding-right: 3.5rem;">
+          <button type="button" id="btn-toggle-invite-visibility" class="btn-icon" style="position: absolute; right: 8px; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer;">Show</button>
+        </div>
       </div>
 
       <button id="btn-submit-invite" class="btn-primary">
@@ -154,6 +157,9 @@
         <div class="turn-indicator">
           <div id="current-turn-dot" class="turn-dot turn-pulse marble-green"></div>
           <span id="turn-label">Player 1's Turn</span>
+          <div id="turn-timer-badge" class="turn-timer-badge">
+            <span id="turn-timer-seconds">30</span>s
+          </div>
         </div>
         <div class="action-mode-selector">
           <button id="btn-mode-move" class="mode-tab-btn active">Move</button>

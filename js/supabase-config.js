@@ -81,6 +81,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'game_terminated' }, ({ payload }) => {
       if (callbacks.onGameTerminated) callbacks.onGameTerminated(payload);
     })
+    .on('broadcast', { event: 'turn_timeout' }, ({ payload }) => {
+      if (callbacks.onTurnTimeout) callbacks.onTurnTimeout(payload);
+    })
     .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
       if (callbacks.onPresenceLeave) callbacks.onPresenceLeave(key, leftPresences);
     })
@@ -120,6 +123,7 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'room_reconnect' && callbacks.onRoomReconnect) callbacks.onRoomReconnect(payload);
     if (type === 'player_left' && callbacks.onPlayerLeft) callbacks.onPlayerLeft(payload);
     if (type === 'game_terminated' && callbacks.onGameTerminated) callbacks.onGameTerminated(payload);
+    if (type === 'turn_timeout' && callbacks.onTurnTimeout) callbacks.onTurnTimeout(payload);
   };
 
   setTimeout(() => {

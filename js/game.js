@@ -92,6 +92,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnPlayAgain = document.getElementById('btn-play-again');
   const btnExitGame = document.getElementById('btn-exit-game');
 
+  const btnToggleInviteVisibility = document.getElementById('btn-toggle-invite-visibility');
+  const turnTimerBadge = document.getElementById('turn-timer-badge');
+  const turnTimerSeconds = document.getElementById('turn-timer-seconds');
+
+  let turnTimerInterval = null;
+  let turnTimeRemaining = 30;
+
   function showToast(message, type = 'error') {
     const container = document.getElementById('toast-container');
     if (!container) return;
@@ -172,13 +179,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // --------------------------------------------------------------------------
   // Event Listeners: Configuration & Menus
   // --------------------------------------------------------------------------
+  if (btnToggleInviteVisibility && inputInviteCode) {
+    btnToggleInviteVisibility.addEventListener('click', () => {
+      if (inputInviteCode.type === 'password') {
+        inputInviteCode.type = 'text';
+        btnToggleInviteVisibility.textContent = 'Hide';
+      } else {
+        inputInviteCode.type = 'password';
+        btnToggleInviteVisibility.textContent = 'Show';
+      }
+    });
+  }
+
   document.getElementById('btn-submit-invite').addEventListener('click', () => {
     const code = inputInviteCode.value.trim();
     if (code === DEFAULT_INVITATION_CODE) {
       showScreen(screens.profile);
     } else {
       inputInviteCode.classList.add('shake-anim');
-      showToast('Invalid access code. Please enter 784921');
+      showToast('Invalid access code. Please check your invitation code.');
       setTimeout(() => inputInviteCode.classList.remove('shake-anim'), 400);
     }
   });
@@ -396,12 +415,21 @@ document.addEventListener('DOMContentLoaded', () => {
       onWallPlaced: (wallData) => {
         handleRemoteWall(wallData);
       },
+      onTurnTimeout: (data) => {
+        const timedOutPlayer = roomState.players.find(p => p.id === data.playerId);
+        const name = timedOutPlayer ? timedOutPlayer.name : 'Player';
+        showToast(`${name}'s turn timed out! Skipped.`);
+        advanceTurn(data.nextTurnIndex);
+        saveActiveSession();
+        renderBoardState();
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
         playerProfile.isReady = false;
         saveActiveSession();
         renderBoardState();
+        startTurnTimer();
       }
     });
 
@@ -440,6 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function terminateAndReturnToInvite(reason) {
+    stopTurnTimer();
     showToast(reason || 'Match ended.');
     clearActiveSession();
     cleanupRoomData(roomState.code);
@@ -636,10 +665,12 @@ document.addEventListener('DOMContentLoaded', () => {
       p.pos = initialPositions[idx];
     });
 
-    roomState.currentTurnIndex = 0;
+    // Randomize who starts the match
+    roomState.currentTurnIndex = Math.floor(Math.random() * roomState.players.length);
     roomState.gameStarted = true;
     roomState.walls = [];
 
+    saveActiveSession();
     broadcastEvent('game_started', roomState);
     launchActiveGame();
   });
@@ -650,7 +681,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function launchActiveGame() {
     currentActionMode = 'MOVE';
     showScreen(screens.game);
+    saveActiveSession();
     renderBoardState();
+    startTurnTimer();
   }
 
   function getOuterPerimeterSpawnPositions(numPlayers) {
@@ -993,6 +1026,75 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function advanceTurn(nextIndex) {
     roomState.currentTurnIndex = nextIndex;
+    resetTurnTimer();
+  }
+
+  // --------------------------------------------------------------------------
+  // 30-Second Turn Countdown Timer & Auto-Skip Engine
+  // --------------------------------------------------------------------------
+  function startTurnTimer() {
+    stopTurnTimer();
+    turnTimeRemaining = 30;
+    updateTimerBadgeUI(30);
+
+    turnTimerInterval = setInterval(() => {
+      turnTimeRemaining--;
+      updateTimerBadgeUI(turnTimeRemaining);
+
+      if (turnTimeRemaining <= 0) {
+        stopTurnTimer();
+        handleTurnTimeout();
+      }
+    }, 1000);
+  }
+
+  function stopTurnTimer() {
+    if (turnTimerInterval) {
+      clearInterval(turnTimerInterval);
+      turnTimerInterval = null;
+    }
+  }
+
+  function resetTurnTimer() {
+    startTurnTimer();
+  }
+
+  function updateTimerBadgeUI(seconds) {
+    if (!turnTimerSeconds) return;
+    const s = Math.max(0, seconds);
+    turnTimerSeconds.textContent = s;
+
+    if (turnTimerBadge) {
+      turnTimerBadge.classList.remove('warning', 'critical');
+      if (s <= 5) {
+        turnTimerBadge.classList.add('critical');
+      } else if (s <= 10) {
+        turnTimerBadge.classList.add('warning');
+      }
+    }
+  }
+
+  function handleTurnTimeout() {
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (!activePlayer) return;
+
+    // Both the active player and the host can initiate the turn skip
+    const isMyTurn = (activePlayer.id === playerProfile.id);
+    const isMeHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
+
+    if (isMyTurn || isMeHost) {
+      const nextTurnIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
+
+      broadcastEvent('turn_timeout', {
+        playerId: activePlayer.id,
+        nextTurnIndex: nextTurnIndex
+      });
+
+      advanceTurn(nextTurnIndex);
+      saveActiveSession();
+      renderBoardState();
+      showToast(`${activePlayer.name}'s turn timed out! Skipped.`);
+    }
   }
 
   function handleRemoteMove(data) {
@@ -1017,6 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function triggerVictory(winner) {
+    stopTurnTimer();
     winnerTitle.textContent = `${winner.name} Wins!`;
     winnerSubtitle.textContent = `${winner.name} reached the golden center goal (5, 5)!`;
 
@@ -1133,7 +1236,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     playerProfile.isReady = false;
     roomState.walls = [];
-    roomState.currentTurnIndex = 0;
+    roomState.currentTurnIndex = Math.floor(Math.random() * roomState.players.length);
     roomState.winner = null;
 
     if (supabaseClient && roomState.code) {
@@ -1144,6 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     modalVictory.classList.remove('active');
     saveActiveSession();
     renderBoardState();
+    startTurnTimer();
   });
 
   btnExitGame.addEventListener('click', () => {

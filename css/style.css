@@ -485,6 +485,48 @@ h1, h2, h3 {
   100% { transform: scale(1.15); opacity: 1; }
 }
 
+/* 30s Turn Countdown Timer Badge */
+.turn-timer-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem 0.65rem;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  border-radius: 20px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #38bdf8;
+  margin-left: 0.5rem;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+  transition: all 0.25s ease;
+}
+
+.turn-timer-badge.warning {
+  border-color: rgba(245, 158, 11, 0.8);
+  color: #fbbf24;
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+  animation: timer-warning-pulse 1s infinite alternate ease-in-out;
+}
+
+@keyframes timer-warning-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.08); }
+}
+
+.turn-timer-badge.critical {
+  border-color: rgba(239, 68, 68, 0.9);
+  color: #f87171;
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.6);
+  animation: timer-critical-pulse 0.5s infinite alternate ease-in-out;
+}
+
+@keyframes timer-critical-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.12); }
+}
+
 /* Mode Selector Tabs in Game Header */
 .action-mode-selector {
   display: flex;
