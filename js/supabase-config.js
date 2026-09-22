@@ -3,7 +3,7 @@
    ========================================================================== */
 
 // Configurable Supabase credentials
-let SUPABASE_URL = "https://YOUR_SUPABASE_PROJECT.supabase.co";
+let SUPABASE_URL = "https://llsvqtyhujpsvgwrpskp.supabase.co";
 let SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
 
 let supabaseClient = null;
