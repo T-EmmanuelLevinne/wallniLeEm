@@ -113,6 +113,29 @@ document.addEventListener('DOMContentLoaded', () => {
     targetScreen.classList.add('active');
   }
 
+  // --------------------------------------------------------------------------
+  // Session Recovery & Reconnection Engine
+  // --------------------------------------------------------------------------
+  function saveActiveSession() {
+    if (roomState.code && playerProfile.id) {
+      try {
+        localStorage.setItem('wallrush_active_session', JSON.stringify({
+          roomCode: roomState.code,
+          playerProfile: playerProfile,
+          isHost: isHost,
+          gameStarted: roomState.gameStarted,
+          timestamp: Date.now()
+        }));
+      } catch (e) {}
+    }
+  }
+
+  function clearActiveSession() {
+    try {
+      localStorage.removeItem('wallrush_active_session');
+    } catch (e) {}
+  }
+
   // Check URL parameters for direct join link e.g. ?join=X7K2P9
   const urlParams = new URLSearchParams(window.location.search);
   const directJoinCode = urlParams.get('join');
@@ -120,6 +143,25 @@ document.addEventListener('DOMContentLoaded', () => {
   if (directJoinCode) {
     inputJoinCode.value = directJoinCode.toUpperCase();
     showScreen(screens.profile);
+  }
+
+  // Auto-Rejoin detection if browser tab was accidentally closed or refreshed
+  const savedSessionRaw = localStorage.getItem('wallrush_active_session');
+  if (savedSessionRaw && !directJoinCode) {
+    try {
+      const session = JSON.parse(savedSessionRaw);
+      // Valid within last 2 hours
+      if (session && session.roomCode && (Date.now() - (session.timestamp || 0) < 2 * 60 * 60 * 1000)) {
+        playerProfile = session.playerProfile || playerProfile;
+        isHost = !!session.isHost;
+        roomState.code = session.roomCode;
+        roomState.gameStarted = !!session.gameStarted;
+        showToast(`Rejoining match ${session.roomCode}...`, 'success');
+        enterLobbyRoom(true);
+      }
+    } catch (e) {
+      clearActiveSession();
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -161,6 +203,7 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState.hostId = playerProfile.id;
     roomState.players = [playerProfile];
 
+    saveActiveSession();
     enterLobbyRoom();
   });
 
@@ -171,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
       isHost = false;
       roomState.code = code;
       roomState.players = [playerProfile];
+      saveActiveSession();
       enterLobbyRoom();
     } else {
       inputJoinCode.classList.add('shake-anim');
@@ -193,16 +237,22 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-leave-lobby').addEventListener('click', () => {
     if (joinTimeout) clearTimeout(joinTimeout);
     if (joinRetryInterval) clearInterval(joinRetryInterval);
-    showScreen(screens.profile);
+    broadcastEvent('player_left', { playerId: playerProfile.id });
+    clearActiveSession();
+    cleanupRoomData(roomState.code);
+    showScreen(screens.invite);
   });
 
   // --------------------------------------------------------------------------
   // Realtime Lobby & Unique Color Selection Engine
   // --------------------------------------------------------------------------
-  function enterLobbyRoom() {
+  function enterLobbyRoom(isReconnecting = false) {
     displayRoomCode.textContent = roomState.code;
     maxPlayersLabel.textContent = roomState.maxPlayers;
-    showScreen(screens.lobbyRoom);
+    
+    if (!roomState.gameStarted) {
+      showScreen(screens.lobbyRoom);
+    }
 
     ensureUniquePlayerColor();
     renderLobbySlotsUI();
@@ -214,14 +264,17 @@ document.addEventListener('DOMContentLoaded', () => {
     joinGameRoomChannel(roomState.code, playerProfile, {
       onSubscribed: () => {
         if (!isHost) {
-          broadcastEvent('room_join_request', playerProfile);
+          const evt = isReconnecting ? 'room_reconnect' : 'room_join_request';
+          broadcastEvent(evt, playerProfile);
           joinRetryInterval = setInterval(() => {
             if (roomState.players.length > 1 || isHost) {
               clearInterval(joinRetryInterval);
             } else {
-              broadcastEvent('room_join_request', playerProfile);
+              broadcastEvent(evt, playerProfile);
             }
           }, 800);
+        } else {
+          broadcastEvent('room_sync', roomState);
         }
       },
       onRoomJoinRequest: (joiningPlayer) => {
@@ -237,9 +290,25 @@ document.addEventListener('DOMContentLoaded', () => {
             joiningPlayer.isReady = false;
             roomState.players.push(joiningPlayer);
           }
+          saveActiveSession();
           broadcastEvent('room_sync', roomState);
           renderLobbySlotsUI();
           renderLobbyColorPickerUI();
+        }
+      },
+      onRoomReconnect: (reconnectingPlayer) => {
+        if (isHost) {
+          const existing = roomState.players.find(p => p.id === reconnectingPlayer.id);
+          if (existing) {
+            existing.name = reconnectingPlayer.name || existing.name;
+          } else if (roomState.players.length < roomState.maxPlayers) {
+            roomState.players.push(reconnectingPlayer);
+          }
+          saveActiveSession();
+          broadcastEvent('room_sync', roomState);
+          if (roomState.gameStarted) {
+            broadcastEvent('game_started', roomState);
+          }
         }
       },
       onRoomSync: (syncedRoomState) => {
@@ -256,8 +325,18 @@ document.addEventListener('DOMContentLoaded', () => {
           playerProfile.isReady = !!meInRoom.isReady;
         }
 
-        renderLobbySlotsUI();
-        renderLobbyColorPickerUI();
+        saveActiveSession();
+
+        if (roomState.gameStarted) {
+          if (!screens.game.classList.contains('active')) {
+            launchActiveGame();
+          } else {
+            renderBoardState();
+          }
+        } else {
+          renderLobbySlotsUI();
+          renderLobbyColorPickerUI();
+        }
       },
       onPlayerColorChanged: (data) => {
         const p = roomState.players.find(pl => pl.id === data.playerId);
@@ -274,12 +353,29 @@ document.addEventListener('DOMContentLoaded', () => {
           p.isReady = data.isReady;
           renderLobbySlotsUI();
           if (isHost) {
+            saveActiveSession();
             broadcastEvent('room_sync', roomState);
           }
         }
       },
+      onPlayerLeft: (data) => {
+        handlePlayerDeparture(data.playerId);
+      },
+      onPresenceLeave: (key, leftPresences) => {
+        if (Array.isArray(leftPresences)) {
+          leftPresences.forEach(pres => {
+            if (pres.id && pres.id !== playerProfile.id) {
+              handlePlayerDeparture(pres.id);
+            }
+          });
+        }
+      },
+      onGameTerminated: (data) => {
+        terminateAndReturnToInvite(data?.reason || 'The match was ended.');
+      },
       onGameStarted: (startedState) => {
         roomState = startedState;
+        saveActiveSession();
         launchActiveGame();
       },
       onPlayerMove: (moveData) => {
@@ -291,11 +387,12 @@ document.addEventListener('DOMContentLoaded', () => {
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
+        saveActiveSession();
         renderBoardState();
       }
     });
 
-    if (!isHost) {
+    if (!isHost && !isReconnecting) {
       joinTimeout = setTimeout(() => {
         if (roomState.players.length === 1 && !isHost) {
           if (joinRetryInterval) clearInterval(joinRetryInterval);
@@ -304,6 +401,53 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }, 6000);
     }
+  }
+
+  function handlePlayerDeparture(departedPlayerId) {
+    const wasInRoom = roomState.players.some(p => p.id === departedPlayerId);
+    if (!wasInRoom) return;
+
+    roomState.players = roomState.players.filter(p => p.id !== departedPlayerId);
+
+    if (roomState.gameStarted) {
+      // If only 1 player remains in an active match, terminate and return to invitation
+      if (roomState.players.length <= 1) {
+        terminateAndReturnToInvite('Only 1 player remaining. Game ended and cleaned.');
+        return;
+      }
+      if (roomState.currentTurnIndex >= roomState.players.length) {
+        roomState.currentTurnIndex = 0;
+      }
+      saveActiveSession();
+      renderBoardState();
+    } else {
+      saveActiveSession();
+      renderLobbySlotsUI();
+    }
+  }
+
+  function terminateAndReturnToInvite(reason) {
+    showToast(reason || 'Match ended.');
+    clearActiveSession();
+    cleanupRoomData(roomState.code);
+
+    if (joinTimeout) clearTimeout(joinTimeout);
+    if (joinRetryInterval) clearInterval(joinRetryInterval);
+
+    roomState = {
+      code: '',
+      hostId: '',
+      maxPlayers: 4,
+      players: [],
+      currentTurnIndex: 0,
+      gameStarted: false,
+      walls: [],
+      winner: null
+    };
+    playerProfile.isReady = false;
+
+    modalVictory.classList.remove('active');
+    showScreen(screens.invite);
   }
 
   function ensureUniquePlayerColor() {
@@ -665,6 +809,9 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState.walls.forEach(w => {
       const wallElem = document.createElement('div');
       wallElem.className = 'wall-block';
+      if (w.color) {
+        wallElem.classList.add(`wall-${w.color}`);
+      }
 
       if (w.orientation === 'H') {
         wallElem.style.width = `${cellWidth * 2 - 4}px`;
@@ -721,6 +868,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         advanceTurn(nextTurnIndex);
+        saveActiveSession();
         renderBoardState();
 
         if (r === GOAL_POS.r && c === GOAL_POS.c) {
@@ -734,7 +882,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentActionMode === 'WALL') {
       const wallR = Math.min(r, GRID_SIZE - 2);
       const wallC = Math.min(c, GRID_SIZE - 2);
-      const proposedWall = { r: wallR, c: wallC, orientation: wallPlacementState.orientation };
+      const proposedWall = {
+        r: wallR,
+        c: wallC,
+        orientation: wallPlacementState.orientation,
+        color: activePlayer.color,
+        playerId: activePlayer.id
+      };
       const playerPositions = roomState.players.map(p => ({ id: p.id, pos: p.pos }));
 
       const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
@@ -751,6 +905,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         advanceTurn(nextIndex);
+        saveActiveSession();
         renderBoardState();
       } else {
         boardGrid.classList.add('shake-anim');
@@ -783,7 +938,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const wallR = Math.min(r, GRID_SIZE - 2);
     const wallC = Math.min(c, GRID_SIZE - 2);
-    const proposedWall = { r: wallR, c: wallC, orientation: wallPlacementState.orientation };
+    const proposedWall = {
+      r: wallR,
+      c: wallC,
+      orientation: wallPlacementState.orientation,
+      color: activePlayer.color,
+      playerId: activePlayer.id
+    };
 
     const boardRect = boardGrid.getBoundingClientRect();
     const cellWidth = boardRect.width / GRID_SIZE;
@@ -791,6 +952,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const previewElem = document.createElement('div');
     previewElem.className = 'wall-preview';
+
+    if (activePlayer && activePlayer.hex) {
+      previewElem.style.borderColor = activePlayer.hex;
+      previewElem.style.backgroundColor = `${activePlayer.hex}55`;
+    }
 
     const check = isValidWallPlacement(proposedWall, roomState.walls, roomState.players.map(p => ({ id: p.id, pos: p.pos })));
     if (!check.valid) {
@@ -821,6 +987,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (p) {
       p.pos = data.pos;
       advanceTurn(data.nextTurnIndex);
+      saveActiveSession();
       renderBoardState();
 
       if (data.pos.r === GOAL_POS.r && data.pos.c === GOAL_POS.c) {
@@ -832,6 +999,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleRemoteWall(data) {
     roomState.walls.push(data.wall);
     advanceTurn(data.nextTurnIndex);
+    saveActiveSession();
     renderBoardState();
   }
 
@@ -857,15 +1025,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     roomState.walls = [];
     roomState.currentTurnIndex = 0;
+    roomState.winner = null;
+
+    if (supabaseClient && roomState.code) {
+      supabaseClient.from('matches').delete().eq('room_code', roomState.code).then(() => {}).catch(() => {});
+    }
 
     broadcastEvent('play_again', roomState);
     modalVictory.classList.remove('active');
+    saveActiveSession();
     renderBoardState();
   });
 
   document.getElementById('btn-exit-game').addEventListener('click', () => {
-    modalVictory.classList.remove('active');
-    showScreen(screens.profile);
+    broadcastEvent('game_terminated', { reason: 'Player exited to main menu.' });
+    terminateAndReturnToInvite('Returned to invitation menu.');
   });
 
   function getCellElem(r, c) {

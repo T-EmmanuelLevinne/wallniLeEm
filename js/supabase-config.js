@@ -72,6 +72,18 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'play_again' }, ({ payload }) => {
       if (callbacks.onPlayAgain) callbacks.onPlayAgain(payload);
     })
+    .on('broadcast', { event: 'room_reconnect' }, ({ payload }) => {
+      if (callbacks.onRoomReconnect) callbacks.onRoomReconnect(payload);
+    })
+    .on('broadcast', { event: 'player_left' }, ({ payload }) => {
+      if (callbacks.onPlayerLeft) callbacks.onPlayerLeft(payload);
+    })
+    .on('broadcast', { event: 'game_terminated' }, ({ payload }) => {
+      if (callbacks.onGameTerminated) callbacks.onGameTerminated(payload);
+    })
+    .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
+      if (callbacks.onPresenceLeave) callbacks.onPresenceLeave(key, leftPresences);
+    })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
         console.log("Supabase channel subscribed:", channelName);
@@ -105,6 +117,9 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'wall_placed' && callbacks.onWallPlaced) callbacks.onWallPlaced(payload);
     if (type === 'game_started' && callbacks.onGameStarted) callbacks.onGameStarted(payload);
     if (type === 'play_again' && callbacks.onPlayAgain) callbacks.onPlayAgain(payload);
+    if (type === 'room_reconnect' && callbacks.onRoomReconnect) callbacks.onRoomReconnect(payload);
+    if (type === 'player_left' && callbacks.onPlayerLeft) callbacks.onPlayerLeft(payload);
+    if (type === 'game_terminated' && callbacks.onGameTerminated) callbacks.onGameTerminated(payload);
   };
 
   setTimeout(() => {
@@ -127,5 +142,34 @@ function broadcastEvent(event, payload) {
     });
   } else if (localBroadcast) {
     localBroadcast.postMessage({ type: event, payload: payload });
+  }
+}
+
+/**
+ * Cleanly terminates and wipes any room session data from Supabase & channels
+ */
+async function cleanupRoomData(roomCode) {
+  try {
+    if (currentChannel) {
+      try {
+        await currentChannel.untrack();
+      } catch (e) {}
+      if (supabaseClient) {
+        supabaseClient.removeChannel(currentChannel);
+      }
+      currentChannel = null;
+    }
+    if (localBroadcast) {
+      localBroadcast.close();
+      localBroadcast = null;
+    }
+    if (supabaseClient && roomCode) {
+      // Safe cleanup query for any potential database tables
+      supabaseClient.from('rooms').delete().eq('code', roomCode).then(() => {}).catch(() => {});
+      supabaseClient.from('matches').delete().eq('room_code', roomCode).then(() => {}).catch(() => {});
+      supabaseClient.from('games').delete().eq('code', roomCode).then(() => {}).catch(() => {});
+    }
+  } catch (err) {
+    console.warn("Cleanup warning:", err);
   }
 }
