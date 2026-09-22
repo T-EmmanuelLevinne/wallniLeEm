@@ -743,19 +743,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function clearMoveHighlights() {
     boardGrid.querySelectorAll('.highlighted-move').forEach(el => {
-      el.classList.remove('highlighted-move');
+      el.classList.remove('highlighted-move', 'jump-move');
     });
   }
 
-  function showMoveHighlights() {
-    clearMoveHighlights();
+  function getValidMovesForPlayer(player, currentRoomState) {
+    if (!player || !player.pos) return [];
 
-    const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos) {
-      return;
-    }
+    const currPos = player.pos;
+    const walls = currentRoomState.walls || [];
+    const otherPlayers = (currentRoomState.players || []).filter(p => p.id !== player.id && p.pos);
+    const validMoves = [];
 
-    const currPos = activePlayer.pos;
     const directions = [
       { dr: -1, dc: 0 }, // Up
       { dr: 1, dc: 0 },  // Down
@@ -767,18 +766,85 @@ document.addEventListener('DOMContentLoaded', () => {
       const nr = currPos.r + d.dr;
       const nc = currPos.c + d.dc;
 
-      // Check within board bounds
-      if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
-        // Check if movement is not blocked by a wall
-        if (!isMoveBlocked(currPos.r, currPos.c, nr, nc, roomState.walls)) {
-          // Check cell not occupied by another player
-          const isOccupied = roomState.players.some(p => p.pos && p.pos.r === nr && p.pos.c === nc);
-          if (!isOccupied) {
-            const cell = getCellElem(nr, nc);
-            if (cell) {
-              cell.classList.add('highlighted-move');
+      // 1. Check within board bounds
+      if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) {
+        return;
+      }
+
+      // 2. Check if movement to adjacent cell is blocked by a wall
+      if (isMoveBlocked(currPos.r, currPos.c, nr, nc, walls)) {
+        return;
+      }
+
+      // 3. Check if adjacent cell is occupied by another player
+      const occupyingPlayer = otherPlayers.find(p => p.pos.r === nr && p.pos.c === nc);
+
+      if (!occupyingPlayer) {
+        // Normal 1-step move
+        validMoves.push({ r: nr, c: nc, type: 'STEP' });
+      } else {
+        // Occupied: Jump over opponent logic!
+        const straightR = nr + d.dr;
+        const straightC = nc + d.dc;
+
+        const isStraightInBounds = (straightR >= 0 && straightR < GRID_SIZE && straightC >= 0 && straightC < GRID_SIZE);
+        const isStraightWallBlocked = isStraightInBounds ? isMoveBlocked(nr, nc, straightR, straightC, walls) : true;
+        const isStraightOccupied = isStraightInBounds ? otherPlayers.some(p => p.pos.r === straightR && p.pos.c === straightC) : true;
+
+        if (isStraightInBounds && !isStraightWallBlocked && !isStraightOccupied) {
+          validMoves.push({
+            r: straightR,
+            c: straightC,
+            type: 'JUMP',
+            overPlayerId: occupyingPlayer.id,
+            overPos: { r: nr, c: nc }
+          });
+        } else {
+          // Straight jump is blocked by a wall behind opponent or board edge; allow diagonal jump to either side
+          const perpendiculars = (d.dr !== 0)
+            ? [{ pdr: 0, pdc: -1 }, { pdr: 0, pdc: 1 }]
+            : [{ pdr: -1, pdc: 0 }, { pdr: 1, pdc: 0 }];
+
+          perpendiculars.forEach(p => {
+            const diagR = nr + p.pdr;
+            const diagC = nc + p.pdc;
+
+            if (diagR >= 0 && diagR < GRID_SIZE && diagC >= 0 && diagC < GRID_SIZE) {
+              if (!isMoveBlocked(nr, nc, diagR, diagC, walls)) {
+                if (!otherPlayers.some(pl => pl.pos.r === diagR && pl.pos.c === diagC)) {
+                  validMoves.push({
+                    r: diagR,
+                    c: diagC,
+                    type: 'DIAG_JUMP',
+                    overPlayerId: occupyingPlayer.id,
+                    overPos: { r: nr, c: nc }
+                  });
+                }
+              }
             }
-          }
+          });
+        }
+      }
+    });
+
+    return validMoves;
+  }
+
+  function showMoveHighlights() {
+    clearMoveHighlights();
+
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos) {
+      return;
+    }
+
+    const validMoves = getValidMovesForPlayer(activePlayer, roomState);
+    validMoves.forEach(m => {
+      const cell = getCellElem(m.r, m.c);
+      if (cell) {
+        cell.classList.add('highlighted-move');
+        if (m.type === 'JUMP' || m.type === 'DIAG_JUMP') {
+          cell.classList.add('jump-move');
         }
       }
     });
@@ -894,22 +960,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // MODE 1: Move Marble
     if (currentActionMode === 'MOVE') {
-      const currPos = activePlayer.pos;
-      const dr = Math.abs(r - currPos.r);
-      const dc = Math.abs(c - currPos.c);
-      const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
-      const cellElem = getCellElem(r, c);
-      const isHighlighted = cellElem?.classList.contains('highlighted-move');
+      const validMoves = getValidMovesForPlayer(activePlayer, roomState);
 
-      if (isHighlighted || (isAdjacent && !isMoveBlocked(currPos.r, currPos.c, r, c, roomState.walls) && !roomState.players.some(p => p.pos && p.pos.r === r && p.pos.c === c))) {
-        activePlayer.pos = { r, c };
+      // Check if clicking directly on a valid landing tile
+      let targetMove = validMoves.find(m => m.r === r && m.c === c);
+
+      // Or if clicking on an adjacent opponent tile to jump over them
+      if (!targetMove) {
+        targetMove = validMoves.find(m => m.overPos && m.overPos.r === r && m.overPos.c === c && m.type === 'JUMP');
+        if (!targetMove) {
+          targetMove = validMoves.find(m => m.overPos && m.overPos.r === r && m.overPos.c === c);
+        }
+      }
+
+      if (targetMove) {
+        const destR = targetMove.r;
+        const destC = targetMove.c;
+
+        activePlayer.pos = { r: destR, c: destC };
         clearMoveHighlights();
 
         const nextTurnIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
 
         broadcastEvent('player_move', {
           playerId: playerProfile.id,
-          pos: { r, c },
+          pos: { r: destR, c: destC },
           nextTurnIndex: nextTurnIndex
         });
 
@@ -917,8 +992,18 @@ document.addEventListener('DOMContentLoaded', () => {
         saveActiveSession();
         renderBoardState();
 
-        if (r === GOAL_POS.r && c === GOAL_POS.c) {
+        if (destR === GOAL_POS.r && destC === GOAL_POS.c) {
           triggerVictory(activePlayer);
+        }
+      } else {
+        const currPos = activePlayer.pos;
+        const dr = Math.abs(r - currPos.r);
+        const dc = Math.abs(c - currPos.c);
+        const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
+        const isOccupied = roomState.players.some(p => p.pos && p.pos.r === r && p.pos.c === c);
+
+        if (isAdjacent && isOccupied) {
+          showToast('Cannot jump over player: path is blocked!');
         }
       }
       return;
