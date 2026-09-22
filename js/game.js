@@ -86,6 +86,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalVictory = document.getElementById('modal-victory');
   const winnerTitle = document.getElementById('winner-title');
   const winnerSubtitle = document.getElementById('winner-subtitle');
+  const victoryPlayersList = document.getElementById('victory-players-list');
+  const victoryWaitingLabel = document.getElementById('victory-waiting-label');
+  const btnVictoryReady = document.getElementById('btn-victory-ready');
+  const btnPlayAgain = document.getElementById('btn-play-again');
+  const btnExitGame = document.getElementById('btn-exit-game');
 
   function showToast(message, type = 'error') {
     const container = document.getElementById('toast-container');
@@ -337,6 +342,10 @@ document.addEventListener('DOMContentLoaded', () => {
           renderLobbySlotsUI();
           renderLobbyColorPickerUI();
         }
+
+        if (modalVictory && modalVictory.classList.contains('active')) {
+          renderVictoryUI();
+        }
       },
       onPlayerColorChanged: (data) => {
         const p = roomState.players.find(pl => pl.id === data.playerId);
@@ -352,6 +361,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (p) {
           p.isReady = data.isReady;
           renderLobbySlotsUI();
+          if (modalVictory && modalVictory.classList.contains('active')) {
+            renderVictoryUI();
+          }
           if (isHost) {
             saveActiveSession();
             broadcastEvent('room_sync', roomState);
@@ -387,6 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
+        playerProfile.isReady = false;
         saveActiveSession();
         renderBoardState();
       }
@@ -1005,7 +1018,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function triggerVictory(winner) {
     winnerTitle.textContent = `${winner.name} Wins!`;
-    winnerSubtitle.textContent = `Stepped on the center golden goal (5, 5)!`;
+    winnerSubtitle.textContent = `${winner.name} reached the golden center goal (5, 5)!`;
+
+    // Reset member ready flags for the next round
+    roomState.players.forEach(p => {
+      p.isReady = false;
+    });
+    playerProfile.isReady = false;
+
+    renderVictoryUI();
     modalVictory.classList.add('active');
 
     if (window.confetti) {
@@ -1017,12 +1038,100 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  document.getElementById('btn-play-again').addEventListener('click', () => {
+  function renderVictoryUI() {
+    if (!victoryPlayersList) return;
+    victoryPlayersList.innerHTML = '';
+
+    const meIsHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
+
+    const nonHostMembers = roomState.players.slice(1);
+    const allMembersReady = nonHostMembers.length > 0 && nonHostMembers.every(m => m.isReady);
+
+    roomState.players.forEach((p, idx) => {
+      const slot = document.createElement('div');
+      slot.className = 'player-slot filled';
+
+      const isHostSlot = (p.id === roomState.hostId || idx === 0);
+      const isMe = (p.id === playerProfile.id);
+
+      let badgeHTML = '';
+      if (isHostSlot) {
+        badgeHTML = '<span class="player-slot-badge">Host</span>';
+      } else {
+        badgeHTML = p.isReady
+          ? '<span class="player-slot-badge ready">Ready</span>'
+          : '<span class="player-slot-badge not-ready">Not Ready</span>';
+      }
+
+      slot.innerHTML = `
+        <div class="player-slot-marble marble-${p.color}"></div>
+        <span class="player-slot-name">${escapeHTML(p.name)} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
+        ${badgeHTML}
+      `;
+
+      victoryPlayersList.appendChild(slot);
+    });
+
+    if (meIsHost) {
+      btnPlayAgain.style.display = 'block';
+      if (btnVictoryReady) btnVictoryReady.style.display = 'none';
+
+      if (allMembersReady && roomState.players.length >= 2) {
+        btnPlayAgain.removeAttribute('disabled');
+        if (victoryWaitingLabel) victoryWaitingLabel.textContent = 'All players ready! Click Play Again to restart match.';
+      } else {
+        btnPlayAgain.setAttribute('disabled', 'true');
+        if (victoryWaitingLabel) victoryWaitingLabel.textContent = 'Waiting for player to ready...';
+      }
+    } else {
+      btnPlayAgain.style.display = 'none';
+      if (btnVictoryReady) {
+        btnVictoryReady.style.display = 'block';
+        const mySlot = roomState.players.find(p => p.id === playerProfile.id);
+        const amReady = mySlot ? mySlot.isReady : playerProfile.isReady;
+
+        if (amReady) {
+          btnVictoryReady.textContent = 'Cancel Ready';
+          btnVictoryReady.classList.add('btn-ready-active');
+          if (victoryWaitingLabel) victoryWaitingLabel.textContent = 'You are ready. Waiting for host to start...';
+        } else {
+          btnVictoryReady.textContent = 'Ready';
+          btnVictoryReady.classList.remove('btn-ready-active');
+          if (victoryWaitingLabel) victoryWaitingLabel.textContent = 'Waiting for player to ready...';
+        }
+      }
+    }
+  }
+
+  // Member ready toggle button in victory modal
+  if (btnVictoryReady) {
+    btnVictoryReady.addEventListener('click', () => {
+      playerProfile.isReady = !playerProfile.isReady;
+      const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+      if (meInRoom) {
+        meInRoom.isReady = playerProfile.isReady;
+      }
+
+      broadcastEvent('player_ready_changed', {
+        playerId: playerProfile.id,
+        isReady: playerProfile.isReady
+      });
+
+      renderVictoryUI();
+    });
+  }
+
+  btnPlayAgain.addEventListener('click', () => {
+    const isPlayerHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
+    if (!isPlayerHost) return;
+
     const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length);
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
+      p.isReady = false;
     });
 
+    playerProfile.isReady = false;
     roomState.walls = [];
     roomState.currentTurnIndex = 0;
     roomState.winner = null;
@@ -1037,8 +1146,13 @@ document.addEventListener('DOMContentLoaded', () => {
     renderBoardState();
   });
 
-  document.getElementById('btn-exit-game').addEventListener('click', () => {
-    broadcastEvent('game_terminated', { reason: 'Player exited to main menu.' });
+  btnExitGame.addEventListener('click', () => {
+    const isPlayerHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
+    if (isPlayerHost) {
+      broadcastEvent('game_terminated', { reason: 'Host exited the game.' });
+    } else {
+      broadcastEvent('player_left', { playerId: playerProfile.id });
+    }
     terminateAndReturnToInvite('Returned to invitation menu.');
   });
 

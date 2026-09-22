@@ -184,10 +184,19 @@
     <div class="glass-card victory-card">
       <div class="victory-header-badge">VICTORY</div>
       <h2 id="winner-title" class="title-glow">Victory!</h2>
-      <p id="winner-subtitle" class="subtitle">Player 1 reached the golden center goal!</p>
+      <p id="winner-subtitle" class="subtitle">Player reached the golden center goal!</p>
 
-      <button id="btn-play-again" class="btn-primary">Play Again</button>
-      <button id="btn-exit-game" class="btn-secondary">Exit to Main Menu</button>
+      <!-- Post-Match Player Status Section -->
+      <div class="input-group" style="margin-top: 1rem; margin-bottom: 1rem;">
+        <label id="victory-waiting-label" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; text-align: center;">Waiting for player to ready...</label>
+        <div id="victory-players-list" class="players-list" style="max-height: 180px; margin-bottom: 0.5rem;">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <button id="btn-play-again" class="btn-primary" disabled>Play Again</button>
+      <button id="btn-victory-ready" class="btn-primary" style="display: none;">Ready</button>
+      <button id="btn-exit-game" class="btn-secondary">Exit</button>
     </div>
   </div>
 
