@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let isHost = false;
   let joinTimeout = null;
+  let joinRetryInterval = null;
 
   let wallPlacementState = {
     orientation: 'H',
@@ -186,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('btn-leave-lobby').addEventListener('click', () => {
     if (joinTimeout) clearTimeout(joinTimeout);
+    if (joinRetryInterval) clearInterval(joinRetryInterval);
     showScreen(screens.profile);
   });
 
@@ -201,8 +203,22 @@ document.addEventListener('DOMContentLoaded', () => {
     renderLobbySlotsUI();
     renderLobbyColorPickerUI();
 
+    if (joinRetryInterval) clearInterval(joinRetryInterval);
+
     // Initialize Realtime messaging channel
     joinGameRoomChannel(roomState.code, playerProfile, {
+      onSubscribed: () => {
+        if (!isHost) {
+          broadcastEvent('room_join_request', playerProfile);
+          joinRetryInterval = setInterval(() => {
+            if (roomState.players.length > 1 || isHost) {
+              clearInterval(joinRetryInterval);
+            } else {
+              broadcastEvent('room_join_request', playerProfile);
+            }
+          }, 800);
+        }
+      },
       onRoomJoinRequest: (joiningPlayer) => {
         if (isHost && roomState.players.length < roomState.maxPlayers) {
           if (!roomState.players.some(p => p.id === joiningPlayer.id)) {
@@ -222,6 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       onRoomSync: (syncedRoomState) => {
         if (joinTimeout) clearTimeout(joinTimeout);
+        if (joinRetryInterval) clearInterval(joinRetryInterval);
 
         roomState = syncedRoomState;
         
@@ -262,16 +279,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (!isHost) {
-      setTimeout(() => {
-        broadcastEvent('room_join_request', playerProfile);
-      }, 100);
-
       joinTimeout = setTimeout(() => {
         if (roomState.players.length === 1 && !isHost) {
+          if (joinRetryInterval) clearInterval(joinRetryInterval);
           showToast('Invalid room code. Please verify the code and try again.');
           showScreen(screens.joinLobby);
         }
-      }, 3000);
+      }, 6000);
     }
   }
 

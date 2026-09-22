@@ -4,13 +4,13 @@
 
 // Configurable Supabase credentials
 let SUPABASE_URL = "https://llsvqtyhujpsvgwrpskp.supabase.co";
-let SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY";
+let SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3ZxdHlodWpwc3Znd3Jwc2twIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAwODk3MjUsImV4cCI6MjEwNTY2NTcyNX0.mn65Ro_e-bsMu_RfoXWa6oBGUdtHKPTouVp2ffYraLw";
 
 let supabaseClient = null;
 let currentChannel = null;
 
 function initSupabase() {
-  if (window.supabase && SUPABASE_URL.includes("supabase.co") && !SUPABASE_URL.includes("YOUR_SUPABASE")) {
+  if (window.supabase && SUPABASE_URL && SUPABASE_ANON_KEY && !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE")) {
     try {
       supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       console.log("Supabase Realtime client initialized!");
@@ -42,6 +42,7 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
 
   currentChannel = supabaseClient.channel(channelName, {
     config: {
+      broadcast: { ack: false, self: false },
       presence: { key: playerProfile.id }
     }
   });
@@ -70,7 +71,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     })
     .subscribe(async (status) => {
       if (status === 'SUBSCRIBED') {
+        console.log("Supabase channel subscribed:", channelName);
         await currentChannel.track(playerProfile);
+        if (callbacks.onSubscribed) callbacks.onSubscribed();
       }
     });
 
@@ -99,6 +102,10 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'game_started' && callbacks.onGameStarted) callbacks.onGameStarted(payload);
     if (type === 'play_again' && callbacks.onPlayAgain) callbacks.onPlayAgain(payload);
   };
+
+  setTimeout(() => {
+    if (callbacks.onSubscribed) callbacks.onSubscribed();
+  }, 50);
 
   return {
     send: ({ type, event, payload }) => {
