@@ -3084,63 +3084,72 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function triggerDismantleSlashVFX(targetCell) {
-    const marble = targetCell.querySelector('.marble-sphere');
-    if (marble) {
-      marble.classList.add('dismantle-sliced-marble');
-      setTimeout(() => marble.classList.remove('dismantle-sliced-marble'), 600);
+    const marble = targetCell.querySelector('.marble-sphere') || targetCell;
+    const rect = marble.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    // 1. Visually bisect and rupture the marble inside the grid cell
+    if (marble && marble.classList.contains('marble-sphere')) {
+      marble.classList.add('dismantle-bisected');
+      const scar = document.createElement('div');
+      scar.className = 'dismantle-cut-scar';
+      marble.appendChild(scar);
+      setTimeout(() => {
+        scar.remove();
+        marble.classList.remove('dismantle-bisected');
+      }, 1250);
     }
 
-    const slashContainer = document.createElement('div');
-    slashContainer.className = 'dismantle-slash-fx';
-    slashContainer.innerHTML = `
-      <svg class="dismantle-slash-svg" viewBox="0 0 120 120" preserveAspectRatio="none">
-        <defs>
-          <filter id="dismantle-black-aura" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#000000" flood-opacity="1"/>
-            <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#000000" flood-opacity="0.95"/>
-          </filter>
-          <filter id="dismantle-white-core" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#ffffff" flood-opacity="1"/>
-          </filter>
-        </defs>
+    // 2. Spawn the cinematic slashing blades centered at (centerX, centerY)
+    const existing = document.querySelector('.dismantle-cinema-overlay');
+    if (existing) existing.remove();
 
-        <!-- Slash 1 (Dominant Black Blade with Razor White Spine) -->
-        <path class="slash-path-black s1" d="M -15,15 Q 50,65 135,105" 
-              stroke="#000000" stroke-width="15" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
-        <path class="slash-path-dark s1" d="M -15,15 Q 50,65 135,105" 
-              stroke="#150207" stroke-width="9" stroke-linecap="round" fill="none" />
-        <path class="slash-path-white s1" d="M -15,15 Q 50,65 135,105" 
-              stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+    const slashOverlay = document.createElement('div');
+    slashOverlay.className = 'dismantle-cinema-overlay';
+    slashOverlay.style.left = `${centerX}px`;
+    slashOverlay.style.top = `${centerY}px`;
 
-        <!-- Slash 2 (Counter Cross-Slash) -->
-        <path class="slash-path-black s2" d="M 130,10 Q 60,60 -10,110" 
-              stroke="#000000" stroke-width="13" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
-        <path class="slash-path-dark s2" d="M 130,10 Q 60,60 -10,110" 
-              stroke="#150207" stroke-width="7.5" stroke-linecap="round" fill="none" />
-        <path class="slash-path-white s2" d="M 130,10 Q 60,60 -10,110" 
-              stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+    slashOverlay.innerHTML = `
+      <div class="dismantle-impact-flash"></div>
+      
+      <!-- SLASH 1: Downward Diagonal Cut (Top-Left to Bottom-Right) -->
+      <div class="dismantle-blade-streak blade-1">
+        <div class="blade-core-black"></div>
+        <div class="blade-edge-white"></div>
+      </div>
 
-        <!-- Slash 3 (Central Piercing Transverse Cut) -->
-        <path class="slash-path-black s3" d="M -10,60 L 130,60" 
-              stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
-        <path class="slash-path-white s3" d="M -10,60 L 130,60" 
-              stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+      <!-- SLASH 2: Upward Diagonal Counter-Cut (Bottom-Left to Top-Right) -->
+      <div class="dismantle-blade-streak blade-2">
+        <div class="blade-core-black"></div>
+        <div class="blade-edge-white"></div>
+      </div>
 
-        <!-- Cursed Spatial Severance Specks -->
-        <circle cx="52" cy="56" r="3.2" fill="#ffffff" />
-        <circle cx="68" cy="64" r="4.2" fill="#000000" />
-        <circle cx="38" cy="46" r="3.8" fill="#000000" />
-      </svg>
+      <!-- SLASH 3: Horizontal Cleave Cut across center -->
+      <div class="dismantle-blade-streak blade-3">
+        <div class="blade-core-black"></div>
+        <div class="blade-edge-white"></div>
+      </div>
+
+      <!-- Spatial Ink Rift Cuts (Heavy Dominant Black geometric slashes) -->
+      <div class="dismantle-ink-rift rift-1"></div>
+      <div class="dismantle-ink-rift rift-2"></div>
+      <div class="dismantle-ink-rift rift-3"></div>
+
+      <!-- Center Cutting Spark Burst -->
       <div class="slash-impact-flash"></div>
     `;
-    targetCell.appendChild(slashContainer);
 
-    targetCell.classList.add('shake-anim');
-    setTimeout(() => targetCell.classList.remove('shake-anim'), 400);
+    document.body.appendChild(slashOverlay);
+
+    // Violent screen and board shake
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('dismantle-impact-shake');
+    setTimeout(() => gameScreen.classList.remove('dismantle-impact-shake'), 450);
 
     setTimeout(() => {
-      slashContainer.remove();
-    }, 550);
+      slashOverlay.remove();
+    }, 700);
   }
 
   function executeTargetDismantledBurnOut(targetId) {
