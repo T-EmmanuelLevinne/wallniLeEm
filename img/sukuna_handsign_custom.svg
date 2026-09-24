@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 55 420 450" width="100%" height="100%">
+<defs>
+  <filter id="hand-glow" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="8" result="blur" />
+    <feColorMatrix type="matrix" values="
+      0.8 0 0 0 0.8
+      0 0.1 0 0 0.1
+      0 0 0.8 0 0.8
+      0 0 0 1.5 0" result="glow" />
+    <feMerge>
+      <feMergeNode in="glow" />
+      <feMergeNode in="SourceGraphic" />
+    </feMerge>
+  </filter>
+
+  <filter id="hand-shadow" x="-20%" y="-20%" width="140%" height="140%">
+    <feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000000" flood-opacity="0.85" />
+  </filter>
+
+  <!-- Anime Skin Shading: Highlights, Base, Shadow, Crease -->
+  <linearGradient id="skin-light" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#faebd7" />
+    <stop offset="40%" stop-color="#edd2c0" />
+    <stop offset="80%" stop-color="#dfb79f" />
+    <stop offset="100%" stop-color="#be8c72" />
+  </linearGradient>
+
+  <linearGradient id="skin-shadow" x1="0%" y1="0%" x2="0%" y2="100%">
+    <stop offset="0%" stop-color="#cf9f83" />
+    <stop offset="50%" stop-color="#ab775c" />
+    <stop offset="100%" stop-color="#693b23" />
+  </linearGradient>
+
+  <!-- Sukuna's Black Cursed Ink Tattoos -->
+  <linearGradient id="sukuna-ink" x1="0%" y1="0%" x2="100%" y2="100%">
+    <stop offset="0%" stop-color="#1f0f14" />
+    <stop offset="50%" stop-color="#080204" />
+    <stop offset="100%" stop-color="#000000" />
+  </linearGradient>
+</defs>
+<g filter="url(#hand-shadow)">
+<path d="M 50,520 C 70,450 110,380 155,340 C 165,330 180,335 190,345 L 210,400 C 160,450 120,500 100,520 Z" fill="url(#skin-shadow)" />
+<path d="M 60,520 C 80,450 120,380 160,340 C 170,330 180,335 190,345 L 180,450 C 150,480 120,510 110,520 Z" fill="url(#skin-light)" />
+<path d="M 450,520 C 430,450 390,380 345,340 C 335,330 320,335 310,345 L 290,400 C 340,450 380,500 400,520 Z" fill="url(#skin-shadow)" />
+<path d="M 440,520 C 420,450 380,380 340,340 C 330,330 320,335 310,345 L 320,450 C 350,480 380,510 390,520 Z" fill="url(#skin-light)" />
+<path d="M 128,400 Q 155,385 182,410 L 175,422 Q 148,397 122,412 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1.5" />
+<path d="M 115,425 Q 142,410 168,435 L 161,447 Q 135,422 109,437 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1.5" />
+<path d="M 372,400 Q 345,385 318,410 L 325,422 Q 352,397 378,412 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1.5" />
+<path d="M 385,425 Q 358,410 332,435 L 339,447 Q 365,422 391,437 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1.5" />
+<path d="M 155,340 C 145,290 170,250 200,240 C 215,235 230,245 235,260 L 235,320 C 210,340 180,350 155,340 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.5" />
+<path d="M 345,340 C 355,290 330,250 300,240 C 285,235 270,245 265,260 L 265,320 C 290,340 320,350 345,340 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.5" />
+<path d="M 215,270 C 230,265 245,275 248,290 C 248,305 235,315 220,312 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 205,295 C 220,290 240,298 245,312 C 245,325 225,335 210,330 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 195,320 C 210,315 230,322 235,335 C 235,348 215,355 200,350 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 285,270 C 270,265 255,275 252,290 C 252,305 265,315 280,312 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 295,295 C 280,290 260,298 255,312 C 255,325 275,335 290,330 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 305,320 C 290,315 270,322 265,335 C 265,348 285,355 300,350 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2" />
+<path d="M 225,285 Q 235,290 245,285" stroke="#784126" stroke-width="1.8" fill="none" />
+<path d="M 215,310 Q 225,315 238,310" stroke="#784126" stroke-width="1.8" fill="none" />
+<path d="M 275,285 Q 265,290 255,285" stroke="#784126" stroke-width="1.8" fill="none" />
+<path d="M 285,310 Q 275,315 262,310" stroke="#784126" stroke-width="1.8" fill="none" />
+<path d="M 205,245 C 220,240 240,250 248,265 C 252,275 240,285 225,280 C 215,275 200,260 205,245 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.5" />
+<path d="M 295,245 C 280,240 260,250 252,265 C 248,275 260,285 275,280 C 285,275 300,260 295,245 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.5" />
+<ellipse cx="242" cy="265" rx="3.5" ry="5" fill="#ffffff" opacity="0.6" />
+<ellipse cx="258" cy="265" rx="3.5" ry="5" fill="#ffffff" opacity="0.6" />
+<path d="M 205,245 C 205,210 220,150 244,92 C 247,84 252,86 250,96 C 240,150 235,210 235,260 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.8" />
+<path d="M 208,245 C 208,210 222,150 244,92 C 245,95 236,160 232,245 Z" fill="url(#skin-shadow)" opacity="0.45" />
+<path d="M 295,245 C 295,210 280,150 256,92 C 253,84 248,86 250,96 C 260,150 265,210 265,260 Z" fill="url(#skin-light)" stroke="#381b10" stroke-width="2.8" />
+<path d="M 292,245 C 292,210 278,150 256,92 C 255,95 264,160 268,245 Z" fill="url(#skin-shadow)" opacity="0.45" />
+<path d="M 243,96 C 243,90 248,88 249,92 C 248,97 244,99 243,96 Z" fill="#ffffff" stroke="#784126" stroke-width="1" />
+<path d="M 257,96 C 257,90 252,88 251,92 C 252,97 256,99 257,96 Z" fill="#ffffff" stroke="#784126" stroke-width="1" />
+<path d="M 233,145 L 244,142 L 243,152 L 232,155 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1" />
+<path d="M 226,190 L 238,187 L 237,198 L 225,201 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1" />
+<path d="M 267,145 L 256,142 L 257,152 L 268,155 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1" />
+<path d="M 274,190 L 262,187 L 263,198 L 275,201 Z" fill="url(#sukuna-ink)" stroke="#000" stroke-width="1" />
+<path d="M 180,265 L 192,260 L 190,270 L 178,275 Z" fill="url(#sukuna-ink)" />
+<path d="M 320,265 L 308,260 L 310,270 L 322,275 Z" fill="url(#sukuna-ink)" />
+<g filter="url(#hand-glow)">
+<circle cx="250" cy="90" r="10" fill="#ffffff" opacity="0.9" />
+<circle cx="250" cy="90" r="22" fill="#ff0044" opacity="0.6" />
+<line x1="250" y1="65" x2="250" y2="115" stroke="#ffffff" stroke-width="2.5" />
+<line x1="225" y1="90" x2="275" y2="90" stroke="#ffffff" stroke-width="2.5" />
+<line x1="232" y1="72" x2="268" y2="108" stroke="#ff0055" stroke-width="2" />
+<line x1="232" y1="108" x2="268" y2="72" stroke="#ff0055" stroke-width="2" />
+</g>
+</g>
+</svg>

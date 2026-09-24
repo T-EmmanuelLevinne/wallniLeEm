@@ -3056,19 +3056,18 @@ select.input-field option {
   pointer-events: none;
 }
 
-/* Domain Hand Sign Emblem placed at circle player */
+/* Domain Hand Sign Mudra placed at circle player (Only the hand visible) */
 .domain-handsign-emblem {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0);
-  width: 84px;
-  height: 84px;
-  border-radius: 50%;
-  border: 2px solid #ff0033;
-  box-shadow: 0 0 25px #ff0033, 0 0 55px rgba(255, 0, 51, 0.8), inset 0 0 15px rgba(255, 0, 51, 0.5);
-  background: radial-gradient(circle, rgba(14, 3, 18, 0.85) 0%, rgba(5, 1, 6, 0.95) 100%);
-  overflow: hidden;
+  width: 90px;
+  height: 98px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  overflow: visible;
   z-index: 3;
   pointer-events: none;
   display: flex;
@@ -3078,11 +3077,10 @@ select.input-field option {
 }
 
 .domain-handsign-emblem img {
-  width: 110%;
-  height: 110%;
-  object-fit: cover;
-  object-position: center;
-  filter: drop-shadow(0 0 8px #ff0033) contrast(1.1);
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px rgba(255, 0, 51, 0.95)) drop-shadow(0 0 22px rgba(255, 0, 51, 0.6)) contrast(1.15);
   animation: handsignGentleFloat 1.5s ease-in-out infinite alternate;
 }
 
@@ -3093,11 +3091,11 @@ select.input-field option {
 }
 
 @keyframes handsignGentleFloat {
-  0% { transform: scale(0.96); filter: drop-shadow(0 0 6px #ff0033) brightness(1); }
-  100% { transform: scale(1.05); filter: drop-shadow(0 0 16px #ff0033) brightness(1.2); }
+  0% { transform: scale(0.96); filter: drop-shadow(0 0 8px #ff0033) brightness(1); }
+  100% { transform: scale(1.05); filter: drop-shadow(0 0 20px #ff0033) brightness(1.2); }
 }
 
-/* 3. Malevolent Shrine rising behind player Le Em */
+/* 3. Malevolent Shrine rising behind player Le Em (Only the house visible) */
 .domain-shrine-container {
   position: fixed;
   z-index: 99992;
@@ -3135,13 +3133,12 @@ select.input-field option {
 .domain-shrine-img {
   position: relative;
   z-index: 2;
-  width: 310px;
+  width: 360px;
+  max-width: 95vw;
   height: auto;
-  max-height: 480px;
+  max-height: 520px;
   object-fit: contain;
-  filter: drop-shadow(0 0 25px rgba(255, 0, 51, 0.9)) drop-shadow(0 0 50px #000000) contrast(1.15);
-  mask-image: radial-gradient(ellipse 90% 88% at 50% 45%, black 65%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 90% 88% at 50% 45%, black 65%, transparent 100%);
+  filter: drop-shadow(0 0 30px rgba(255, 0, 51, 0.95)) drop-shadow(0 0 60px #000000) contrast(1.15);
 }
 
 /* 4. Ground shaking continuous earthquake for 10 seconds */
@@ -3157,7 +3154,7 @@ select.input-field option {
   100% { transform: translate3d(-6px, -7px, 0) rotate(-0.5deg); }
 }
 
-/* 5. Fullscreen Omnipresent White, Red, and Black Slashes */
+/* 5. Fullscreen Omnipresent White, Red, and Black Slashes (Different Sizes) */
 .domain-fullscreen-slashes {
   position: fixed;
   inset: 0;
@@ -3168,12 +3165,63 @@ select.input-field option {
 
 .domain-omni-slash {
   position: absolute;
-  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
   transform-origin: center center;
+}
+
+/* SIZES: Different sizes that take up the entire screen */
+.domain-omni-slash.size-colossal {
+  height: 54px;
+  z-index: 10;
+}
+.domain-omni-slash.size-colossal .blade-core-black {
+  box-shadow: 0 0 25px #000000, 0 0 55px #ff0033;
+}
+.domain-omni-slash.size-colossal .blade-edge-white {
+  height: 7px;
+  box-shadow: 0 0 14px #ffffff, 0 0 30px #ffffff, 0 0 50px #ff0033;
+}
+.domain-omni-slash.size-colossal .blade-aura-red {
+  height: 24px;
+  filter: blur(4px);
+}
+
+.domain-omni-slash.size-large {
+  height: 36px;
+  z-index: 8;
+}
+.domain-omni-slash.size-large .blade-edge-white {
+  height: 5px;
+  box-shadow: 0 0 10px #ffffff, 0 0 22px #ffffff, 0 0 35px #ff0033;
+}
+.domain-omni-slash.size-large .blade-aura-red {
+  height: 16px;
+  filter: blur(3px);
+}
+
+.domain-omni-slash.size-medium {
+  height: 22px;
+  z-index: 6;
+}
+.domain-omni-slash.size-medium .blade-edge-white {
+  height: 3.5px;
+}
+.domain-omni-slash.size-medium .blade-aura-red {
+  height: 10px;
+}
+
+.domain-omni-slash.size-small {
+  height: 12px;
+  z-index: 4;
+}
+.domain-omni-slash.size-small .blade-edge-white {
+  height: 2px;
+}
+.domain-omni-slash.size-small .blade-aura-red {
+  height: 6px;
 }
 
 .domain-omni-blade {
@@ -3183,7 +3231,7 @@ select.input-field option {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: omniSlashSwipe 0.24s cubic-bezier(0.12, 0.9, 0.25, 1) forwards;
+  animation: omniSlashSwipe 0.22s cubic-bezier(0.12, 0.9, 0.25, 1) forwards;
 }
 
 /* 3-Color Slash: Black Core, White Cutting Spine, Red Cursed Boundary */
@@ -3191,26 +3239,41 @@ select.input-field option {
   position: absolute;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent 0%, #000000 10%, #0a0104 50%, #000000 90%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, #000000 8%, #080104 50%, #000000 92%, transparent 100%);
   box-shadow: 0 0 16px #000000, 0 0 35px #ff0033;
-  clip-path: polygon(0% 50%, 10% 5%, 90% 5%, 100% 50%, 90% 95%, 10% 95%);
+  clip-path: polygon(0% 50%, 8% 5%, 92% 5%, 100% 50%, 92% 95%, 8% 95%);
 }
 
 .domain-omni-blade .blade-edge-white {
   position: absolute;
   width: 100%;
-  height: 4.5px;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 10%, #ffffff 50%, rgba(255, 255, 255, 0.8) 90%, transparent 100%);
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.7) 8%, #ffffff 50%, rgba(255, 255, 255, 0.7) 92%, transparent 100%);
   box-shadow: 0 0 10px #ffffff, 0 0 20px #ffffff, 0 0 30px #ff0033;
 }
 
 .domain-omni-blade .blade-aura-red {
   position: absolute;
-  width: 95%;
-  height: 12px;
-  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 51, 0.7) 15%, #ff0033 50%, rgba(255, 0, 51, 0.7) 85%, transparent 100%);
-  filter: blur(2px);
-  opacity: 0.85;
+  width: 96%;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 0, 51, 0.7) 12%, #ff0033 50%, rgba(255, 0, 51, 0.7) 88%, transparent 100%);
+  filter: blur(2.5px);
+  opacity: 0.9;
+}
+
+/* Lingering screen fracture line that scars the display */
+.domain-screen-fracture {
+  position: absolute;
+  height: 3px;
+  background: linear-gradient(90deg, transparent 0%, #ffffff 30%, #ff0033 50%, #ffffff 70%, transparent 100%);
+  box-shadow: 0 0 12px #ff0033, 0 0 25px #ff0033;
+  pointer-events: none;
+  z-index: 99996;
+  opacity: 0.9;
+  animation: fractureFade 0.4s ease-out forwards;
+}
+
+@keyframes fractureFade {
+  0% { opacity: 1; transform: scaleY(1.5); }
+  100% { opacity: 0; transform: scaleY(0.2); }
 }
 
 @keyframes omniSlashSwipe {

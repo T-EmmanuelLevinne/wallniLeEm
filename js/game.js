@@ -3460,14 +3460,14 @@ document.addEventListener('DOMContentLoaded', () => {
       clonedMarbleHTML = '<div class="marble-sphere marble-red player-sukuna-active domain-caster-marble-clone"></div>';
     }
 
-    // Hand sign emblem placed at circle player (based on second image)
+    // Hand sign mudra placed at circle player (Only the hand visible)
     casterSpotlight.innerHTML = `
       <div class="domain-caster-aura"></div>
       <div class="domain-caster-player-circle">
         ${clonedMarbleHTML}
       </div>
       <div class="domain-handsign-emblem">
-        <img src="img/sukuna_handsign.png" alt="Domain Hand Sign">
+        <img src="img/sukuna_handsign_custom.svg" alt="Domain Hand Sign">
       </div>
     `;
     document.body.appendChild(casterSpotlight);
@@ -3475,7 +3475,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ------------------------------------------------------------------------
     // PHASE 2 (4.0s to 7.3s):
     // After 4s, the shrine behind Le Em will slowly rise for 3.3s
-    // and fade in back to normal with the house present
+    // and fade in back to normal with the house present (Only the house visible)
     // ------------------------------------------------------------------------
     let shrineContainer = null;
     setTimeout(() => {
@@ -3490,7 +3490,7 @@ document.addEventListener('DOMContentLoaded', () => {
       shrineContainer.style.top = `${casterCenter.y}px`;
       shrineContainer.innerHTML = `
         <div class="domain-shrine-aura"></div>
-        <img src="img/malevolent_shrine.png" class="domain-shrine-img" alt="Malevolent Shrine">
+        <img src="img/malevolent_shrine_custom.svg" class="domain-shrine-img" alt="Malevolent Shrine">
       `;
       document.body.appendChild(shrineContainer);
 
@@ -3501,7 +3501,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ------------------------------------------------------------------------
     // PHASE 3 (7.3s to 17.3s):
-    // White, red, black SLASH EVERYWHERE ON THE SCREEN FOR 10 SECONDS WITH GROUND SHAKING
+    // White, red, black SLASHES EVERYWHERE (DIFFERENT SIZES TAKING UP ENTIRE SCREEN)
+    // FOR 10 SECONDS WITH CONTINUOUS GROUND SHAKING
     // ------------------------------------------------------------------------
     let slashOverlay = null;
     let slashInterval = null;
@@ -3530,55 +3531,96 @@ document.addEventListener('DOMContentLoaded', () => {
       const omniAngles = [-60, 45, -30, 80, -75, 15, -85, 50, -40, 90, 0, 135, -120, 30, -55, 65, 20, -15, -45, 110];
       let cutCount = 0;
 
+      // High-volume multi-sized slashing tempest: 2 to 4 cuts every 40ms
       slashInterval = setInterval(() => {
-        cutCount++;
-        const angle = omniAngles[cutCount % omniAngles.length];
-        const slashWidth = 340 + Math.random() * 320; // 340px to 660px length
+        const batch = 2 + Math.floor(Math.random() * 3);
 
-        let posX = Math.random() * window.innerWidth;
-        let posY = Math.random() * window.innerHeight;
+        for (let b = 0; b < batch; b++) {
+          cutCount++;
+          const angle = omniAngles[cutCount % omniAngles.length];
 
-        // Every 3rd slash strikes directly across an opponent marble
-        if (cutCount % 3 === 0 && opponentCells.length > 0) {
-          const opp = opponentCells[cutCount % opponentCells.length];
-          const rect = opp.marble.getBoundingClientRect();
-          if (rect.width > 0) {
-            posX = rect.left + rect.width / 2;
-            posY = rect.top + rect.height / 2;
-            const wound = document.createElement('div');
-            wound.className = 'cleave-marble-wound';
-            wound.style.transform = `translateY(-50%) rotate(${angle}deg)`;
-            opp.marble.appendChild(wound);
-            setTimeout(() => wound.remove(), 600);
+          // 4 SIZES: Colossal (spans entire screen), Large, Medium, Small
+          const roll = Math.random();
+          let sizeClass = 'size-medium';
+          let slashWidth = 450;
+          let posX = Math.random() * window.innerWidth;
+          let posY = Math.random() * window.innerHeight;
+
+          if (roll < 0.22) {
+            // COLOSSAL: Takes up the ENTIRE SCREEN from corner to corner
+            sizeClass = 'size-colossal';
+            slashWidth = Math.max(window.innerWidth, window.innerHeight) * (1.15 + Math.random() * 0.7);
+            posX = window.innerWidth / 2 + (Math.random() * 300 - 150);
+            posY = window.innerHeight / 2 + (Math.random() * 300 - 150);
+
+            // Screen fracture scar that lingers across the screen
+            if (cutCount % 4 === 0) {
+              const fracture = document.createElement('div');
+              fracture.className = 'domain-screen-fracture';
+              fracture.style.left = `${posX}px`;
+              fracture.style.top = `${posY}px`;
+              fracture.style.width = `${slashWidth * 0.85}px`;
+              fracture.style.marginLeft = `${-(slashWidth * 0.85) / 2}px`;
+              fracture.style.transform = `rotate(${angle}deg)`;
+              slashOverlay.appendChild(fracture);
+              setTimeout(() => fracture.remove(), 400);
+            }
+          } else if (roll < 0.50) {
+            // LARGE: Broad sweep across board sections
+            sizeClass = 'size-large';
+            slashWidth = 650 + Math.random() * 450;
+          } else if (roll < 0.78) {
+            // MEDIUM: Focused cleave
+            sizeClass = 'size-medium';
+            slashWidth = 360 + Math.random() * 260;
+          } else {
+            // SMALL: Rapid micro razor cut
+            sizeClass = 'size-small';
+            slashWidth = 160 + Math.random() * 180;
           }
+
+          // Direct hits on opponent marbles with deep cut wounds
+          if (cutCount % 4 === 0 && opponentCells.length > 0) {
+            const opp = opponentCells[cutCount % opponentCells.length];
+            const rect = opp.marble.getBoundingClientRect();
+            if (rect.width > 0) {
+              posX = rect.left + rect.width / 2;
+              posY = rect.top + rect.height / 2;
+              const wound = document.createElement('div');
+              wound.className = 'cleave-marble-wound';
+              wound.style.transform = `translateY(-50%) rotate(${angle}deg)`;
+              opp.marble.appendChild(wound);
+              setTimeout(() => wound.remove(), 600);
+            }
+          }
+
+          const slashEl = document.createElement('div');
+          slashEl.className = `domain-omni-slash ${sizeClass}`;
+          slashEl.style.left = `${posX}px`;
+          slashEl.style.top = `${posY}px`;
+          slashEl.style.width = `${slashWidth}px`;
+          slashEl.style.marginLeft = `${-slashWidth / 2}px`;
+          slashEl.style.transform = `rotate(${angle}deg)`;
+          slashEl.innerHTML = `
+            <div class="domain-omni-blade">
+              <div class="blade-aura-red"></div>
+              <div class="blade-core-black"></div>
+              <div class="blade-edge-white"></div>
+            </div>
+          `;
+          slashOverlay.appendChild(slashEl);
+
+          setTimeout(() => slashEl.remove(), 260);
         }
 
-        const slashEl = document.createElement('div');
-        slashEl.className = 'domain-omni-slash';
-        slashEl.style.left = `${posX}px`;
-        slashEl.style.top = `${posY}px`;
-        slashEl.style.width = `${slashWidth}px`;
-        slashEl.style.marginLeft = `${-slashWidth / 2}px`;
-        slashEl.style.transform = `rotate(${angle}deg)`;
-        slashEl.innerHTML = `
-          <div class="domain-omni-blade">
-            <div class="blade-aura-red"></div>
-            <div class="blade-core-black"></div>
-            <div class="blade-edge-white"></div>
-          </div>
-        `;
-        slashOverlay.appendChild(slashEl);
-
         // Ambient flash pulse
-        if (cutCount % 8 === 0) {
+        if (cutCount % 12 === 0) {
           const flash = document.createElement('div');
           flash.className = 'domain-ambient-flash';
           document.body.appendChild(flash);
           setTimeout(() => flash.remove(), 280);
         }
-
-        setTimeout(() => slashEl.remove(), 250);
-      }, 65);
+      }, 40);
     }, 7300);
 
     // ------------------------------------------------------------------------
