@@ -2819,8 +2819,8 @@ select.input-field option {
   pointer-events: none;
   z-index: 999999;
   transform: translate(-50%, -50%);
-  width: 420px;
-  height: 420px;
+  width: 440px;
+  height: 440px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2829,8 +2829,8 @@ select.input-field option {
 
 .cleave-barrage-core-vortex {
   position: absolute;
-  width: 170px;
-  height: 170px;
+  width: 140px;
+  height: 140px;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 0, 51, 0.5) 0%, rgba(0, 0, 0, 0.95) 55%, transparent 75%);
   box-shadow: 0 0 50px #ff0033, 0 0 100px #000000;
@@ -2842,55 +2842,88 @@ select.input-field option {
   100% { transform: scale(1.25); opacity: 1; }
 }
 
-.cleave-streak {
+/* Multi-Angle Rotated Cutting Track that accurately cuts through targeted player */
+.cleave-cut-track {
   position: absolute;
-  width: 420px;
-  height: 24px;
+  left: 50%;
+  top: 50%;
+  width: 440px;
+  height: 32px;
+  margin-left: -220px;
+  margin-top: -16px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.cleave-cut-blade {
+  position: absolute;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
-  opacity: 0;
-  animation: cleaveSingleSlashSwipe 0.22s cubic-bezier(0.12, 0.85, 0.32, 1) forwards;
+  animation: cleaveBladeSwipeAccurate 0.22s cubic-bezier(0.12, 0.9, 0.25, 1) forwards;
 }
 
-.cleave-streak-black {
+.cleave-cut-blade .blade-core-black {
   position: absolute;
   width: 100%;
   height: 100%;
   background: linear-gradient(90deg, transparent 0%, #000000 12%, #080204 50%, #000000 88%, transparent 100%);
-  box-shadow: 0 0 14px #000000, 0 0 28px rgba(0, 0, 0, 0.95);
+  box-shadow: 0 0 16px #000000, 0 0 32px rgba(0, 0, 0, 0.95);
   clip-path: polygon(0% 50%, 12% 5%, 88% 5%, 100% 50%, 88% 95%, 12% 95%);
 }
 
-.cleave-streak-white {
+.cleave-cut-blade .blade-edge-white {
   position: absolute;
   width: 100%;
-  height: 3.5px;
+  height: 4px;
   background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 12%, #ffffff 50%, rgba(255, 255, 255, 0.8) 88%, transparent 100%);
-  box-shadow: 0 0 8px #ffffff, 0 0 18px #ff0033;
+  box-shadow: 0 0 10px #ffffff, 0 0 20px #ff0033;
 }
 
-@keyframes cleaveSingleSlashSwipe {
+@keyframes cleaveBladeSwipeAccurate {
   0% {
-    transform: translate(-150px, 0) scaleX(0.2) scaleY(0.4);
+    transform: translateX(-200px) scaleX(0.2) scaleY(0.4);
     opacity: 0;
   }
   20% {
     opacity: 1;
   }
   50% {
-    transform: translate(0, 0) scaleX(1.3) scaleY(1.2);
+    transform: translateX(0px) scaleX(1.4) scaleY(1.35);
     opacity: 1;
   }
   80% {
-    transform: translate(120px, 0) scaleX(1.05) scaleY(0.7);
-    opacity: 0.9;
+    transform: translateX(130px) scaleX(1.1) scaleY(0.7);
+    opacity: 0.95;
   }
   100% {
-    transform: translate(180px, 0) scaleX(0.7) scaleY(0.1);
+    transform: translateX(210px) scaleX(0.6) scaleY(0.1);
     opacity: 0;
   }
+}
+
+/* Dynamic Cutting Wounds on Target Marble */
+.cleave-marble-wound {
+  position: absolute;
+  top: 50%;
+  left: -35%;
+  width: 170%;
+  height: 4px;
+  background: #000000;
+  box-shadow: 0 0 6px #ffffff, 0 0 14px #ff0033;
+  border-radius: 2px;
+  z-index: 35;
+  pointer-events: none;
+  animation: marbleWoundRip 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes marbleWoundRip {
+  0% { transform: translateY(-50%) scaleX(0); opacity: 0; }
+  15% { transform: translateY(-50%) scaleX(1.3); opacity: 1; }
+  70% { transform: translateY(-50%) scaleX(1); opacity: 0.9; }
+  100% { transform: translateY(-50%) scaleX(1.05); opacity: 0; }
 }
 
 .cleave-spark {
@@ -2926,18 +2959,6 @@ select.input-field option {
 @keyframes cleaveMarbleViolentPulse {
   0% { transform: scale(1.08) translate(-3px, 2px); filter: brightness(2.6) contrast(2.6) drop-shadow(0 0 16px #ff0033); }
   100% { transform: scale(0.92) translate(3px, -2px); filter: brightness(1.2) contrast(1.5); }
-}
-
-.cleave-cross-scar {
-  position: absolute;
-  top: 50%;
-  left: -30%;
-  width: 160%;
-  height: 4.5px;
-  background: #000000;
-  box-shadow: 0 0 6px #ffffff, 0 0 16px #ff0033;
-  border-radius: 2px;
-  z-index: 35;
 }
 
 .cleave-strike-tag {

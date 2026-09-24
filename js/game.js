@@ -2850,7 +2850,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!isSukunaButtonRevealed) {
       isSukunaButtonRevealed = true;
-      showToast('⛩️ Cursed energy stirred... Sukuna Mode unlocked!', 'success');
+      showToast('Cursed energy stirred... Sukuna Mode unlocked!', 'success');
     }
   }
 
@@ -3010,11 +3010,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const btn = document.createElement('button');
       btn.className = 'dismantle-target-btn';
 
-      let strikeTagHTML = '<div class="dismantle-strike-tag">DISMANTLE ⚔️</div>';
+      let strikeTagHTML = '<div class="dismantle-strike-tag">DISMANTLE</div>';
       if (techType === 'cleave') {
-        strikeTagHTML = '<div class="cleave-strike-tag">CLEAVE 🩸</div>';
+        strikeTagHTML = '<div class="cleave-strike-tag">CLEAVE</div>';
       } else if (techType === 'domain') {
-        strikeTagHTML = '<div class="domain-strike-tag">EXPAND DOMAIN ⛩️</div>';
+        strikeTagHTML = '<div class="domain-strike-tag">EXPAND DOMAIN</div>';
       }
 
       btn.innerHTML = `
@@ -3269,94 +3269,108 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function triggerCleaveConsistentBarrageVFX(targetCell, durationMs = 3000) {
-    let centerX = window.innerWidth / 2;
-    let centerY = window.innerHeight / 2;
-    let marble = null;
+    if (!targetCell) return;
+    const marble = targetCell.querySelector('.marble-sphere') || targetCell;
 
-    if (targetCell) {
-      marble = targetCell.querySelector('.marble-sphere') || targetCell;
+    // Get real-time viewport center of target marble
+    function getTargetCenter() {
       const rect = marble.getBoundingClientRect();
       if (rect.width > 0 && rect.height > 0) {
-        centerX = rect.left + rect.width / 2;
-        centerY = rect.top + rect.height / 2;
-      } else {
-        const cellRect = targetCell.getBoundingClientRect();
-        if (cellRect.width > 0 && cellRect.height > 0) {
-          centerX = cellRect.left + cellRect.width / 2;
-          centerY = cellRect.top + cellRect.height / 2;
-        }
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       }
-
-      if (marble && marble.classList.contains('marble-sphere')) {
-        marble.classList.add('cleave-bisected-heavy');
-        const scar1 = document.createElement('div');
-        scar1.className = 'cleave-cross-scar';
-        scar1.style.transform = 'translateY(-50%) rotate(35deg)';
-        marble.appendChild(scar1);
-
-        const scar2 = document.createElement('div');
-        scar2.className = 'cleave-cross-scar';
-        scar2.style.transform = 'translateY(-50%) rotate(-45deg)';
-        marble.appendChild(scar2);
-
-        setTimeout(() => {
-          scar1.remove();
-          scar2.remove();
-          marble.classList.remove('cleave-bisected-heavy');
-        }, durationMs + 800);
-      }
+      const cellRect = targetCell.getBoundingClientRect();
+      return { x: cellRect.left + cellRect.width / 2, y: cellRect.top + cellRect.height / 2 };
     }
 
+    const initialCenter = getTargetCenter();
+
+    // Clean up any prior barrage overlay
     const existing = document.querySelector('.cleave-barrage-overlay');
     if (existing) existing.remove();
 
     const overlay = document.createElement('div');
     overlay.className = 'cleave-barrage-overlay';
-    overlay.style.left = `${centerX}px`;
-    overlay.style.top = `${centerY}px`;
+    overlay.style.left = `${initialCenter.x}px`;
+    overlay.style.top = `${initialCenter.y}px`;
     overlay.innerHTML = `
       <div class="cleave-barrage-core-vortex"></div>
     `;
     document.body.appendChild(overlay);
 
+    // Marble heavy cursed reaction
+    if (marble && marble.classList.contains('marble-sphere')) {
+      marble.classList.add('cleave-bisected-heavy');
+    }
+
     const gameScreen = document.querySelector('.game-screen') || document.body;
     gameScreen.classList.add('cleave-continuous-shake');
     if (boardGrid) boardGrid.classList.add('cleave-continuous-shake');
 
-    // Consistent rapid slash spawning every 95ms throughout the 3 seconds
-    const slashInterval = setInterval(() => {
-      const angle = (Math.random() * 360) - 180;
-      const scale = 0.85 + Math.random() * 0.45;
-      const streak = document.createElement('div');
-      streak.className = 'cleave-streak';
-      streak.style.transform = `rotate(${angle}deg) scale(${scale})`;
-      streak.innerHTML = `
-        <div class="cleave-streak-black"></div>
-        <div class="cleave-streak-white"></div>
-      `;
-      overlay.appendChild(streak);
+    // Choreographed storm of realistic slicing angles directly through the targeted player
+    const cutAngles = [
+      -45, 45, -15, 75, -70, 20, -85, 55,
+      -35, 88, -10, 65, -80, 15, -55, 38,
+      -90, 0, -65, 80, -25, 50, -40, 85,
+      -75, 30, -20, 42, -48, 90, -90, 135
+    ];
 
-      // Cursed blood sparks
+    let step = 0;
+    const slashInterval = setInterval(() => {
+      step++;
+      const center = getTargetCenter();
+      overlay.style.left = `${center.x}px`;
+      overlay.style.top = `${center.y}px`;
+
+      const angle = cutAngles[step % cutAngles.length];
+      const lateralOffset = ((step % 5) - 2) * 6; // slight variance (-12px to +12px) across diameter
+
+      // 1. Multi-Angle Rotated Track that accurately cuts through the target center
+      const track = document.createElement('div');
+      track.className = 'cleave-cut-track';
+      track.style.transform = `rotate(${angle}deg) translateY(${lateralOffset}px)`;
+      track.innerHTML = `
+        <div class="cleave-cut-blade">
+          <div class="blade-core-black"></div>
+          <div class="blade-edge-white"></div>
+        </div>
+      `;
+      overlay.appendChild(track);
+
+      // 2. Real-time razor cut scar etched onto the target marble itself at this angle
+      if (marble && marble.classList.contains('marble-sphere')) {
+        const wound = document.createElement('div');
+        wound.className = 'cleave-marble-wound';
+        wound.style.transform = `translateY(calc(-50% + ${lateralOffset}px)) rotate(${angle}deg)`;
+        marble.appendChild(wound);
+        setTimeout(() => wound.remove(), 600);
+      }
+
+      // 3. Directional cursed sparks spraying along cutting trajectory
       for (let s = 0; s < 3; s++) {
         const spark = document.createElement('div');
         spark.className = 'cleave-spark';
-        const dist = 30 + Math.random() * 65;
-        const sparkAngle = Math.random() * Math.PI * 2;
-        spark.style.setProperty('--tx', `${Math.cos(sparkAngle) * dist}px`);
-        spark.style.setProperty('--ty', `${Math.sin(sparkAngle) * dist}px`);
+        const dist = 35 + Math.random() * 65;
+        const rad = (angle + (Math.random() * 40 - 20)) * (Math.PI / 180);
+        spark.style.setProperty('--tx', `${Math.cos(rad) * dist}px`);
+        spark.style.setProperty('--ty', `${Math.sin(rad) * dist}px`);
         overlay.appendChild(spark);
         setTimeout(() => spark.remove(), 280);
       }
 
-      setTimeout(() => streak.remove(), 220);
-    }, 95);
+      setTimeout(() => track.remove(), 230);
+    }, 90);
 
-    // Stop barrage after 3.0 seconds
+    // Stop barrage after durationMs (3000ms)
     setTimeout(() => {
       clearInterval(slashInterval);
       gameScreen.classList.remove('cleave-continuous-shake');
       if (boardGrid) boardGrid.classList.remove('cleave-continuous-shake');
 
+      if (marble && marble.classList.contains('marble-sphere')) {
+        marble.classList.remove('cleave-bisected-heavy');
+      }
+
+      // Final devastating severance impact flash
       const finalFlash = document.createElement('div');
       finalFlash.className = 'dismantle-impact-flash';
       overlay.appendChild(finalFlash);
@@ -3410,7 +3424,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    showToast('⛩️ DOMAIN EXPANSION: MALEVOLENT SHRINE ⛩️', 'error');
+    showToast('DOMAIN EXPANSION: MALEVOLENT SHRINE', 'error');
 
     // Trigger full board slashing barrage and domain aura
     let targetCell = tPos ? getCellElem(tPos.r, tPos.c) : null;
@@ -3451,7 +3465,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isMe) playerProfile.isSpectating = false;
 
       const winner = roomState.players.find(p => p.id !== target.id);
-      showToast(`⚔️ ${target.name} was defeated by ${techniqueName}!`, 'error');
+      showToast(`${target.name} was defeated by ${techniqueName}!`, 'error');
 
       // Authoritative broadcast fallback from caster to sync all peers and end game
       if (playerProfile.id === casterId) {
@@ -3477,7 +3491,7 @@ document.addEventListener('DOMContentLoaded', () => {
     target.isSpectating = true;
     if (isMe) playerProfile.isSpectating = true;
 
-    showToast(`⚔️ ${target.name} was defeated by ${techniqueName} and burned out!`, 'error');
+    showToast(`${target.name} was defeated by ${techniqueName} and burned out!`, 'error');
 
     if (playerProfile.id === casterId) {
       broadcastEvent('player_burn_out', {
