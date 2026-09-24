@@ -1745,7 +1745,8 @@ select.input-field option {
   user-select: none;
 }
 
-/* Board in Wall Dragging State */
+/* Board in Wall Mode / Dragging State */
+.board-glowing-inner.wall-mode-active,
 .board-glowing-inner.wall-drag-active {
   cursor: crosshair;
   touch-action: none !important;
@@ -1891,28 +1892,81 @@ select.input-field option {
   letter-spacing: 0.02em;
 }
 
+.hud-rotatable {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  transition: opacity 0.15s ease;
+}
+
+.hud-rotatable:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
 .hud-rotate-btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.25rem 0.6rem;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
   background: rgba(255, 255, 255, 0.16);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-radius: 50%;
   color: #ffffff;
-  font-family: var(--font-heading);
-  font-size: 0.75rem;
-  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.18s ease;
+  flex-shrink: 0;
 }
 
 .hud-rotate-btn:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.32);
+  transform: rotate(60deg);
 }
 
 .hud-rotate-btn:active {
-  transform: scale(0.92);
+  transform: scale(0.9);
+}
+
+.hud-place-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem 0.75rem;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 12px;
+  color: #ffffff;
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: all 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+  flex-shrink: 0;
+}
+
+.hud-place-btn:hover {
+  background: linear-gradient(135deg, #34d399, #10b981);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.65);
+  transform: translateY(-1px);
+}
+
+.hud-place-btn:active {
+  transform: scale(0.93);
+}
+
+.hud-place-btn.disabled {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: rgba(255, 255, 255, 0.45);
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 /* ==========================================================================

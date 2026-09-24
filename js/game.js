@@ -150,9 +150,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return 23; // 8 players
   }
 
+  let lastToastInfo = { message: '', timestamp: 0 };
+
   function showToast(message, type = 'error') {
     const container = document.getElementById('toast-container');
-    if (!container) return;
+    if (!container || !message) return;
+
+    const trimmedMsg = String(message).trim();
+
+    // 1. Debounce exact same message within 2.5 seconds
+    const now = Date.now();
+    if (lastToastInfo.message === trimmedMsg && (now - lastToastInfo.timestamp) < 2500) {
+      return;
+    }
+
+    // 2. Prevent duplicate identical toasts currently visible in the DOM
+    const activeToasts = Array.from(container.children);
+    if (activeToasts.some(t => t.textContent.trim() === trimmedMsg)) {
+      return;
+    }
+
+    lastToastInfo = { message: trimmedMsg, timestamp: now };
 
     const toast = document.createElement('div');
     toast.className = `toast-message ${type}`;
@@ -818,6 +836,14 @@ document.addEventListener('DOMContentLoaded', () => {
         handleRemoteWall(wallData);
       },
       onTurnTimeout: (data) => {
+        if (data && data.turnIndex !== undefined && lastHandledTimeoutTurn === data.turnIndex) {
+          return;
+        }
+        if (data && data.turnIndex !== undefined) {
+          lastHandledTimeoutTurn = data.turnIndex;
+        } else {
+          lastHandledTimeoutTurn = roomState.currentTurnIndex;
+        }
         const timedOutPlayer = roomState.players.find(p => p.id === data.playerId);
         const name = timedOutPlayer ? timedOutPlayer.name : 'Player';
         showToast(`${name}'s turn timed out! Skipped.`);
@@ -1175,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnModeMove) btnModeMove.classList.add('active');
       if (btnModeWall) btnModeWall.classList.remove('active');
       if (btnRotateWall) btnRotateWall.style.display = 'none';
+      boardGrid.classList.remove('wall-mode-active');
       clearWallDragGuide();
 
       const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id && !playerProfile.burnedOut);
@@ -1188,7 +1215,14 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRotateWall.style.display = 'inline-block';
         btnRotateWall.textContent = `Rotate (${wallPlacementState.orientation})`;
       }
+      boardGrid.classList.add('wall-mode-active');
       clearMoveHighlights();
+
+      // Default wall position in the middle of the board
+      const mid = Math.max(0, Math.floor((GRID_SIZE - 2) / 2));
+      wallPlacementState.hoverR = mid;
+      wallPlacementState.hoverC = mid;
+      renderWallPreview(mid, mid);
     }
   }
 
@@ -1666,41 +1700,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // MODE 2: Place Wall
     if (currentActionMode === 'WALL') {
-      if (Date.now() - lastWallPlacementTime < 350) return;
       const wallR = Math.min(r, GRID_SIZE - 2);
       const wallC = Math.min(c, GRID_SIZE - 2);
-      const proposedWall = {
-        r: wallR,
-        c: wallC,
-        orientation: wallPlacementState.orientation,
-        color: activePlayer.color,
-        playerId: activePlayer.id
-      };
-      const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
-
-      const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
-
-      if (check.valid) {
-        lastWallPlacementTime = Date.now();
-        lastPlacedWall = proposedWall;
-        roomState.walls.push(proposedWall);
-        clearWallDragGuide();
-
-        const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
-
-        broadcastEvent('wall_placed', {
-          wall: proposedWall,
-          nextTurnIndex: nextIndex
-        });
-
-        advanceTurn(nextIndex);
-        saveActiveSession();
-        renderBoardState();
-      } else {
-        boardGrid.classList.add('shake-anim');
-        showToast(check.reason || 'Invalid wall placement');
-        setTimeout(() => boardGrid.classList.remove('shake-anim'), 400);
-      }
+      wallPlacementState.hoverR = wallR;
+      wallPlacementState.hoverC = wallC;
+      renderWallPreview(wallR, wallC);
+      return;
     }
   }
 
@@ -1812,11 +1817,30 @@ document.addEventListener('DOMContentLoaded', () => {
       activeDragHud = document.createElement('div');
       activeDragHud.className = 'wall-drag-hud';
       document.body.appendChild(activeDragHud);
+
+      activeDragHud.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+      });
+
+      activeDragHud.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const placeBtn = e.target.closest('.hud-place-btn');
+        if (placeBtn) {
+          confirmWallPlacement();
+          return;
+        }
+        const rotateBtn = e.target.closest('.hud-rotate-btn');
+        const rotatableText = e.target.closest('.hud-rotatable');
+        if (rotateBtn || rotatableText) {
+          toggleWallOrientation();
+          return;
+        }
+      });
     }
 
     activeDragHud.className = `wall-drag-hud ${check.valid ? 'hud-valid' : 'hud-invalid'}`;
     const statusText = check.valid
-      ? `Wall (${wallPlacementState.orientation === 'H' ? 'Horiz' : 'Vert'}) • Release`
+      ? `Wall (${wallPlacementState.orientation === 'H' ? 'Horiz' : 'Vert'})`
       : (check.reason || 'Blocked');
 
     activeDragHud.innerHTML = `
@@ -1826,29 +1850,25 @@ document.addEventListener('DOMContentLoaded', () => {
         : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
       }
       </div>
-      <span class="hud-text">${statusText}</span>
+      <span class="hud-text hud-rotatable" title="Tap to rotate">
+        ${statusText}
+      </span>
       <button type="button" class="hud-rotate-btn" title="Rotate Wall">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-        Flip
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+      </button>
+      <button type="button" class="hud-place-btn ${check.valid ? 'can-place' : 'disabled'}" title="Confirm Wall Placement">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        Place
       </button>
     `;
 
-    const hudFlipBtn = activeDragHud.querySelector('.hud-rotate-btn');
-    if (hudFlipBtn) {
-      hudFlipBtn.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-        e.preventDefault();
-        toggleWallOrientation();
-      });
-    }
-
-    const hudX = Math.max(120, Math.min(window.innerWidth - 120, clientX));
-    const hudY = Math.max(40, clientY - 70);
+    const hudX = Math.max(110, Math.min(window.innerWidth - 110, clientX));
+    const hudY = (clientY < 130) ? (clientY + 65) : Math.max(40, clientY - 70);
     activeDragHud.style.left = `${hudX}px`;
     activeDragHud.style.top = `${hudY}px`;
 
-    // 4. Touch Beacon under finger on touch devices
-    if (window.matchMedia('(pointer: coarse)').matches) {
+    // 4. Touch Beacon under finger on touch devices during active drag
+    if (isDraggingWall && window.matchMedia('(pointer: coarse)').matches) {
       if (!activeTouchBeacon) {
         activeTouchBeacon = document.createElement('div');
         activeTouchBeacon.className = 'wall-touch-beacon';
@@ -1856,6 +1876,9 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       activeTouchBeacon.style.left = `${clientX}px`;
       activeTouchBeacon.style.top = `${clientY}px`;
+    } else if (!isDraggingWall && activeTouchBeacon) {
+      activeTouchBeacon.remove();
+      activeTouchBeacon = null;
     }
   }
 
@@ -1894,6 +1917,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentActionMode === 'WALL') {
       isDraggingWall = true;
       boardGrid.classList.add('wall-drag-active');
+      try {
+        boardGrid.setPointerCapture(e.pointerId);
+      } catch (err) {}
 
       const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
       wallPlacementState.hoverR = seam.r;
@@ -1923,61 +1949,30 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('pointerup', (e) => {
     if (!isDraggingWall) return;
     isDraggingWall = false;
+    boardGrid.classList.remove('wall-drag-active');
+    try {
+      boardGrid.releasePointerCapture(e.pointerId);
+    } catch (err) {}
 
-    const boardRect = boardGrid.getBoundingClientRect();
-    const isInsideBoard = (
-      e.clientX >= boardRect.left - 40 &&
-      e.clientX <= boardRect.right + 40 &&
-      e.clientY >= boardRect.top - 40 &&
-      e.clientY <= boardRect.bottom + 40
-    );
-
-    const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (isInsideBoard && activePlayer && activePlayer.id === playerProfile.id && !activePlayer.burnedOut) {
-      const wallR = wallPlacementState.hoverR;
-      const wallC = wallPlacementState.hoverC;
-
-      if (wallR >= 0 && wallC >= 0) {
-        const proposedWall = {
-          r: wallR,
-          c: wallC,
-          orientation: wallPlacementState.orientation,
-          color: activePlayer.color,
-          playerId: activePlayer.id
-        };
-        const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
-        const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
-
-        clearWallDragGuide();
-
-        if (check.valid) {
-          lastWallPlacementTime = Date.now();
-          lastPlacedWall = proposedWall;
-          roomState.walls.push(proposedWall);
-          const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
-          broadcastEvent('wall_placed', {
-            wall: proposedWall,
-            nextTurnIndex: nextIndex
-          });
-          advanceTurn(nextIndex);
-          saveActiveSession();
-          renderBoardState();
-        } else {
-          boardGrid.classList.add('shake-anim');
-          showToast(check.reason || 'Invalid wall placement');
-          setTimeout(() => boardGrid.classList.remove('shake-anim'), 400);
-        }
-        return;
-      }
+    if (activeTouchBeacon) {
+      activeTouchBeacon.remove();
+      activeTouchBeacon = null;
     }
 
-    clearWallDragGuide();
+    // Keep guide, crosshairs, and preview active so user can easily adjust or tap "Place"!
   });
 
-  window.addEventListener('pointercancel', () => {
+  window.addEventListener('pointercancel', (e) => {
     if (isDraggingWall) {
       isDraggingWall = false;
-      clearWallDragGuide();
+      boardGrid.classList.remove('wall-drag-active');
+      try {
+        boardGrid.releasePointerCapture(e.pointerId);
+      } catch (err) {}
+      if (activeTouchBeacon) {
+        activeTouchBeacon.remove();
+        activeTouchBeacon = null;
+      }
     }
   });
 
@@ -1992,11 +1987,69 @@ document.addEventListener('DOMContentLoaded', () => {
   window.addEventListener('keydown', (e) => {
     if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
       toggleWallOrientation();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      if (currentActionMode === 'WALL') {
+        confirmWallPlacement();
+      }
     }
   });
 
+  function confirmWallPlacement() {
+    if (playerProfile.burnedOut) return;
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) {
+      showToast("It's not your turn!");
+      return;
+    }
+
+    const wallR = wallPlacementState.hoverR;
+    const wallC = wallPlacementState.hoverC;
+
+    if (wallR < 0 || wallC < 0) {
+      showToast("Position your wall first.");
+      return;
+    }
+
+    const proposedWall = {
+      r: wallR,
+      c: wallC,
+      orientation: wallPlacementState.orientation,
+      color: activePlayer.color,
+      playerId: activePlayer.id
+    };
+    const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
+    const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
+
+    if (check.valid) {
+      lastWallPlacementTime = Date.now();
+      lastPlacedWall = proposedWall;
+      roomState.walls.push(proposedWall);
+      clearWallDragGuide();
+
+      const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+      broadcastEvent('wall_placed', {
+        wall: proposedWall,
+        nextTurnIndex: nextIndex
+      });
+
+      advanceTurn(nextIndex);
+      saveActiveSession();
+      renderBoardState();
+      setActionMode('MOVE');
+    } else {
+      boardGrid.classList.add('shake-anim');
+      if (activeDragHud) {
+        activeDragHud.classList.add('shake-anim');
+        setTimeout(() => activeDragHud && activeDragHud.classList.remove('shake-anim'), 400);
+      }
+      showToast(check.reason || 'Invalid wall placement');
+      setTimeout(() => boardGrid.classList.remove('shake-anim'), 400);
+    }
+  }
+
   function advanceTurn(nextIndex) {
     roomState.currentTurnIndex = nextIndex;
+    lastHandledTimeoutTurn = -1;
     resetTurnTimer();
   }
 
@@ -2045,19 +2098,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  let lastHandledTimeoutTurn = -1;
+
   function handleTurnTimeout() {
     const activePlayer = roomState.players[roomState.currentTurnIndex];
     if (!activePlayer) return;
+    if (lastHandledTimeoutTurn === roomState.currentTurnIndex) return;
 
     // Both the active player and the host can initiate the turn skip
     const isMyTurn = (activePlayer.id === playerProfile.id);
     const isMeHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
 
     if (isMyTurn || isMeHost) {
-      const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+      const currentIdx = roomState.currentTurnIndex;
+      lastHandledTimeoutTurn = currentIdx;
+      const nextTurnIndex = getNextActiveTurnIndex(currentIdx);
 
       broadcastEvent('turn_timeout', {
         playerId: activePlayer.id,
+        turnIndex: currentIdx,
         nextTurnIndex: nextTurnIndex
       });
 
