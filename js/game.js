@@ -3460,12 +3460,8 @@ document.addEventListener('DOMContentLoaded', () => {
       clonedMarbleHTML = '<div class="marble-sphere marble-red player-sukuna-active domain-caster-marble-clone"></div>';
     }
 
-    // Hand sign mudra placed at circle player (Only the hand visible)
+    // Hand sign mudra placed at circle player (Only the hand visible, shrunk, no circle behind it)
     casterSpotlight.innerHTML = `
-      <div class="domain-caster-aura"></div>
-      <div class="domain-caster-player-circle">
-        ${clonedMarbleHTML}
-      </div>
       <div class="domain-handsign-emblem">
         <img src="img/sukuna_handsign_custom.svg" alt="Domain Hand Sign">
       </div>
@@ -3483,13 +3479,12 @@ document.addEventListener('DOMContentLoaded', () => {
       voidFadeout.classList.remove('active');
       voidFadeout.classList.add('fade-back');
 
-      // The shrine ("little house") behind player Le Em
+      // The shrine ("little house") behind player Le Em (Only the house visible)
       shrineContainer = document.createElement('div');
       shrineContainer.className = 'domain-shrine-container';
       shrineContainer.style.left = `${casterCenter.x}px`;
       shrineContainer.style.top = `${casterCenter.y}px`;
       shrineContainer.innerHTML = `
-        <div class="domain-shrine-aura"></div>
         <img src="img/malevolent_shrine_custom.svg" class="domain-shrine-img" alt="Malevolent Shrine">
       `;
       document.body.appendChild(shrineContainer);

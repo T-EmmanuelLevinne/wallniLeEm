@@ -3012,6 +3012,7 @@ select.input-field option {
 }
 
 /* 2. Caster spotlight anchor (Le Em and hand sign stay present above fadeout) */
+/* 2. Caster spotlight anchor (Only the hand visible placed at circle player) */
 .domain-caster-spotlight {
   position: fixed;
   z-index: 99996;
@@ -3020,50 +3021,18 @@ select.input-field option {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 140px;
-  height: 140px;
+  width: 60px;
+  height: 60px;
 }
 
-.domain-caster-aura {
-  position: absolute;
-  width: 130px;
-  height: 130px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 0, 51, 0.7) 0%, rgba(255, 0, 51, 0.25) 50%, transparent 75%);
-  box-shadow: 0 0 40px #ff0033, 0 0 80px rgba(255, 0, 51, 0.75);
-  animation: casterAuraThrob 1.2s ease-in-out infinite alternate;
-}
-
-@keyframes casterAuraThrob {
-  0% { transform: scale(0.92); opacity: 0.8; }
-  100% { transform: scale(1.28); opacity: 1; }
-}
-
-.domain-caster-player-circle {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  filter: drop-shadow(0 0 14px #ff0033);
-}
-
-.domain-caster-player-circle .marble-sphere {
-  margin: 0 !important;
-  pointer-events: none;
-}
-
-/* Domain Hand Sign Mudra placed at circle player (Only the hand visible) */
+/* Domain Hand Sign Mudra placed at circle player (Shrunk, only hand visible, no circle) */
 .domain-handsign-emblem {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0);
-  width: 90px;
-  height: 98px;
+  width: 52px;
+  height: 58px;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
@@ -3073,29 +3042,29 @@ select.input-field option {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: handsignManifest 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: handsignManifest 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .domain-handsign-emblem img {
   width: 100%;
   height: 100%;
   object-fit: contain;
-  filter: drop-shadow(0 0 10px rgba(255, 0, 51, 0.95)) drop-shadow(0 0 22px rgba(255, 0, 51, 0.6)) contrast(1.15);
+  filter: drop-shadow(0 0 8px rgba(255, 0, 51, 0.9)) drop-shadow(0 0 16px rgba(255, 0, 51, 0.5)) contrast(1.15);
   animation: handsignGentleFloat 1.5s ease-in-out infinite alternate;
 }
 
 @keyframes handsignManifest {
   0% { transform: translate(-50%, -50%) scale(0.2) rotate(-15deg); opacity: 0; }
-  60% { transform: translate(-50%, -50%) scale(1.18) rotate(3deg); opacity: 1; }
+  60% { transform: translate(-50%, -50%) scale(1.15) rotate(3deg); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1) rotate(0deg); opacity: 1; }
 }
 
 @keyframes handsignGentleFloat {
-  0% { transform: scale(0.96); filter: drop-shadow(0 0 8px #ff0033) brightness(1); }
-  100% { transform: scale(1.05); filter: drop-shadow(0 0 20px #ff0033) brightness(1.2); }
+  0% { transform: scale(0.96); filter: drop-shadow(0 0 6px #ff0033) brightness(1); }
+  100% { transform: scale(1.05); filter: drop-shadow(0 0 16px #ff0033) brightness(1.2); }
 }
 
-/* 3. Malevolent Shrine rising behind player Le Em (Only the house visible) */
+/* 3. Malevolent Shrine rising behind player Le Em (Only the house visible, no circle) */
 .domain-shrine-container {
   position: fixed;
   z-index: 99992;
@@ -3112,22 +3081,6 @@ select.input-field option {
 .domain-shrine-container.shrine-risen {
   transform: translate(-50%, calc(-50% - 85px)) scale(1.0);
   opacity: 1;
-}
-
-.domain-shrine-aura {
-  position: absolute;
-  width: 380px;
-  height: 380px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(200, 0, 30, 0.75) 0%, rgba(60, 0, 15, 0.9) 45%, transparent 75%);
-  box-shadow: 0 0 70px #ff0033, 0 0 120px rgba(0, 0, 0, 0.95);
-  z-index: 1;
-  animation: shrineAuraSwirl 4s ease-in-out infinite alternate;
-}
-
-@keyframes shrineAuraSwirl {
-  0% { transform: scale(0.9) rotate(-5deg); opacity: 0.8; }
-  100% { transform: scale(1.15) rotate(5deg); opacity: 1; }
 }
 
 .domain-shrine-img {
