@@ -874,7 +874,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (data.isSukuna) {
             p.sukunaTransformedAt = Date.now();
             triggerSukunaAnimeVFX();
-            playAudio('audio/domainexpansion.mp3', 0.85);
+            playAudio('audio/gambale.mp3', 0.95);
           }
           renderBoardState();
         }
@@ -2882,10 +2882,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (isSukunaModeActive) {
-      // 1. Play domain expansion audio
-      playAudio('audio/domainexpansion.mp3', 0.95);
+      // 1. Play ONLY gambale.mp3 as requested
+      playAudio('audio/gambale.mp3', 0.95);
 
-      // 2. Trigger dramatic anime VFX sequence with cleave and dismantle
+      // 2. Trigger dramatic anime VFX sequence
       triggerSukunaAnimeVFX();
     }
 
@@ -2913,13 +2913,9 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="sukuna-anime-banner">
         <div class="sukuna-banner-kanji">宿 儺</div>
         <div class="sukuna-banner-title">SUKUNA MODE</div>
-        <div class="sukuna-banner-sub">RYŌIKI TENKAI</div>
       </div>
     `;
     document.body.appendChild(overlay);
-
-    setTimeout(() => playAudio('audio/cleave.mp3', 0.7), 280);
-    setTimeout(() => playAudio('audio/dismantle.mp3', 0.65), 520);
 
     const gameScreen = document.querySelector('.game-screen') || document.body;
     gameScreen.classList.add('sukuna-screen-shake');
@@ -2937,69 +2933,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const animClass = isIntro ? 'sukuna-etch-anim' : '';
     return `
       <svg class="sukuna-tattoo-svg ${animClass}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
-        <defs>
-          <filter id="sukuna-eye-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
-            <feMerge>
-              <feMergeNode in="coloredBlur"/>
-              <feMergeNode in="SourceGraphic"/>
-            </feMerge>
-          </filter>
-        </defs>
-
         <g class="sukuna-ink-layer" fill="#0b0a10">
-          <!-- 1. FOREHEAD TRIDENT / CROWN MARK -->
-          <ellipse cx="50" cy="18" rx="2.4" ry="5.2" />
-          <path d="M 45 13 C 43 20 46 26 48 30 C 47.5 25 46 20 48 14 Z" />
-          <path d="M 55 13 C 57 20 54 26 52 30 C 52.5 25 54 20 52 14 Z" />
-          <path d="M 41 16 C 38 22 40 28 43 32 C 41.5 27 40 22 43.5 17 Z" />
-          <path d="M 59 16 C 62 22 60 28 57 32 C 58.5 27 60 22 56.5 17 Z" />
+          <!-- 1. FOREHEAD TRIDENT / CROWN TRIBAL MARK -->
+          <ellipse cx="50" cy="20" rx="3" ry="6.2" />
+          <path d="M 44 14 C 41 21 45 28 47 33 C 46.5 27 44 21 47 15 Z" />
+          <path d="M 56 14 C 59 21 55 28 53 33 C 53.5 27 56 21 53 15 Z" />
+          <path d="M 39 17 C 35 24 38 31 42 36 C 40 30 38 24 42 18 Z" />
+          <path d="M 61 17 C 65 24 62 31 58 36 C 60 30 62 24 58 18 Z" />
 
-          <!-- 2. EYEBROWS -->
-          <path d="M 27 34 Q 36 30 45 36 Q 36 33 27 34 Z" />
-          <path d="M 73 34 Q 64 30 55 36 Q 64 33 73 34 Z" />
+          <!-- 2. NOSE BRIDGE TRIBAL STRIPE -->
+          <path d="M 34 52 Q 50 48 66 52 Q 50 56.5 34 52 Z" />
 
-          <!-- 3. UPPER EYE CONTOURS -->
-          <path d="M 29 41 Q 37 37 45 42 Q 37 39 29 41 Z" />
-          <path d="M 71 41 Q 63 37 55 42 Q 63 39 71 41 Z" />
-
-          <!-- 4. NOSE BRIDGE TRIBAL STRIPE -->
-          <path d="M 37 53 Q 50 49 63 53 Q 50 56.5 37 53 Z" />
-
-          <!-- 5. CHEEK TRIBAL MARKS -->
+          <!-- 3. CHEEK TRIBAL MARKS -->
           <!-- Left Cheek -->
-          <path d="M 12 47 Q 22 49 26 53 Q 20 54 12 50 Z" />
-          <path d="M 16 54 Q 25 56 28 60 Q 22 61 16 57 Z" />
+          <path d="M 10 44 Q 22 47 28 52 Q 21 53.5 10 48 Z" />
+          <path d="M 14 53 Q 26 56 31 61 Q 24 62.5 14 57 Z" />
           <!-- Right Cheek -->
-          <path d="M 88 47 Q 78 49 74 53 Q 80 54 88 50 Z" />
-          <path d="M 84 54 Q 75 56 72 60 Q 78 61 84 57 Z" />
+          <path d="M 90 44 Q 78 47 72 52 Q 79 53.5 90 48 Z" />
+          <path d="M 86 53 Q 74 56 69 61 Q 76 62.5 86 57 Z" />
 
-          <!-- 6. SECONDARY SLIT EYES (Under main eyes) -->
-          <path d="M 31 47 Q 37 51 43 47 Q 37 49 31 47 Z" />
-          <path d="M 57 47 Q 63 51 69 47 Q 63 49 57 47 Z" />
-
-          <!-- 7. MOUTH & GRIN -->
-          <path d="M 33 65 Q 50 78 67 65 Q 50 72 33 65 Z" />
-
-          <!-- 8. JAW & CHIN TRIBAL MARKINGS -->
-          <path d="M 24 67 Q 34 76 43 78 Q 34 73 24 67 Z" />
-          <path d="M 76 67 Q 66 76 57 78 Q 66 73 76 67 Z" />
-          <rect x="44.5" y="77" width="2.8" height="12" rx="1.2" />
-          <rect x="52.7" y="77" width="2.8" height="12" rx="1.2" />
+          <!-- 4. JAW & CHIN TRIBAL MARKINGS -->
+          <path d="M 22 67 Q 34 77 44 79 Q 34 74 22 67 Z" />
+          <path d="M 78 67 Q 66 77 56 79 Q 66 74 78 67 Z" />
+          <rect x="43.5" y="78" width="3.2" height="13" rx="1.5" />
+          <rect x="53.3" y="78" width="3.2" height="13" rx="1.5" />
         </g>
-
-        <!-- Teeth highlight in grin -->
-        <path d="M 36 66 Q 50 74 64 66" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" />
-
-        <!-- 4 GLOWING CRIMSON EYES -->
-        <circle cx="37" cy="41.5" r="3.2" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
-        <circle cx="37" cy="41.5" r="1.3" fill="#0a0a0f" />
-        <circle cx="63" cy="41.5" r="3.2" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
-        <circle cx="63" cy="41.5" r="1.3" fill="#0a0a0f" />
-
-        <!-- Lower Second Pair Slit Eyes (Glinting red) -->
-        <circle cx="37" cy="48.5" r="1.4" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
-        <circle cx="63" cy="48.5" r="1.4" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
       </svg>
     `;
   }
