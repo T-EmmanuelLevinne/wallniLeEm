@@ -28,9 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
     isReady: false
   };
 
+  let selectedCreateGameMode = 'ffa'; // 'ffa' or 'team'
+
   let roomState = {
     code: '',
     hostId: '',
+    gameMode: 'ffa', // 'ffa' or 'team'
+    gridSize: 11,    // 11 (2-4 players) or 13 (5-8 players)
     maxPlayers: 4,
     players: [],
     currentTurnIndex: 0,
@@ -63,7 +67,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // DOM Element References & Toast System
   // --------------------------------------------------------------------------
   const screens = {
-    invite: document.getElementById('screen-invite'),
     profile: document.getElementById('screen-profile'),
     createLobby: document.getElementById('screen-create-lobby'),
     joinLobby: document.getElementById('screen-join-lobby'),
@@ -71,12 +74,17 @@ document.addEventListener('DOMContentLoaded', () => {
     game: document.getElementById('screen-game')
   };
 
-  const inputInviteCode = document.getElementById('invite-code');
   const inputPlayerName = document.getElementById('player-name');
+  const devTagPreview = document.getElementById('dev-tag-preview');
   const inputJoinCode = document.getElementById('join-room-code');
   const selectMaxPlayers = document.getElementById('max-players-select');
+  const btnModeFfa = document.getElementById('btn-mode-ffa');
+  const btnModeTeam = document.getElementById('btn-mode-team');
+  const lobbyModeHelperNote = document.getElementById('lobby-mode-helper-note');
   
   const displayRoomCode = document.getElementById('display-room-code');
+  const lobbyModeBadge = document.getElementById('lobby-mode-badge');
+  const lobbyGridBadge = document.getElementById('lobby-grid-badge');
   const playerCountLabel = document.getElementById('player-count-label');
   const maxPlayersLabel = document.getElementById('max-players-label');
   const lobbyPlayersList = document.getElementById('lobby-players-list');
@@ -100,9 +108,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnPlayAgain = document.getElementById('btn-play-again');
   const btnExitGame = document.getElementById('btn-exit-game');
 
-  const btnToggleInviteVisibility = document.getElementById('btn-toggle-invite-visibility');
   const turnTimerBadge = document.getElementById('turn-timer-badge');
   const turnTimerSeconds = document.getElementById('turn-timer-seconds');
+
+  const modalDevPasscode = document.getElementById('modal-dev-passcode');
+  const devPasscodeInput = document.getElementById('dev-passcode-input');
+  const btnCancelPasscode = document.getElementById('btn-cancel-passcode');
+  const btnVerifyPasscode = document.getElementById('btn-verify-passcode');
 
   const btnBurnOut = document.getElementById('btn-burn-out');
   const btnBurnOutText = document.getElementById('btn-burn-out-text');
@@ -111,11 +123,32 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnConfirmBurn = document.getElementById('btn-confirm-burn');
   const livePlayersList = document.getElementById('live-players-list');
   const livePlayerCount = document.getElementById('live-player-count');
+  const sidebarHeadingText = document.getElementById('sidebar-heading-text');
 
+  let isDevVerified = false;
+  let pendingDevName = '';
   let turnTimerInterval = null;
   let turnTimeRemaining = 30;
   let isReconnectingActive = false;
   let reconnectTimeout = null;
+
+  // Helper to ensure burned out or spectating status never leaks across lobbies
+  function resetPlayerStatus() {
+    playerProfile.burnedOut = false;
+    playerProfile.isSpectating = false;
+    playerProfile.isReady = false;
+  }
+
+  // Helper: Computes odd grid dimension with an exact single center tile
+  // 2-4: 11x11 (center: 5,5), 5: 13x13 (center: 6,6), 6: 17x17 (center: 8,8), 7: 19x19 (center: 9,9), 8: 23x23 (center: 11,11)
+  function getGridSizeForPlayerCount(count) {
+    const c = parseInt(count, 10);
+    if (c <= 4) return 11;
+    if (c === 5) return 13;
+    if (c === 6) return 17;
+    if (c === 7) return 19;
+    return 23; // 8 players
+  }
 
   function showToast(message, type = 'error') {
     const container = document.getElementById('toast-container');
@@ -230,59 +263,199 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState.code = '';
     roomState.players = [];
     roomState.gameStarted = false;
+    resetPlayerStatus();
 
     showToast(reason || 'Match is no longer available.', 'error');
-    showScreen(screens.invite);
+    showScreen(screens.profile);
   }
 
   // --------------------------------------------------------------------------
-  // Event Listeners: Configuration & Menus
+  // Developer Passcode Verification for 'Le Em' [DEV] (Passcode: 8119)
   // --------------------------------------------------------------------------
-  if (btnToggleInviteVisibility && inputInviteCode) {
-    btnToggleInviteVisibility.addEventListener('click', () => {
-      if (inputInviteCode.type === 'password') {
-        inputInviteCode.type = 'text';
-        btnToggleInviteVisibility.textContent = 'Hide';
-      } else {
-        inputInviteCode.type = 'password';
-        btnToggleInviteVisibility.textContent = 'Show';
+  function isDeveloper(pOrName) {
+    if (!pOrName) return false;
+    if (typeof pOrName === 'object') {
+      if (pOrName.isDev) return true;
+      if (pOrName.id === playerProfile.id) return isDevVerified;
+      if (pOrName.name && pOrName.name.trim().toLowerCase() === 'le em') {
+        return !!pOrName.isDev;
+      }
+      return false;
+    }
+    const isMatch = typeof pOrName === 'string' && pOrName.trim().toLowerCase() === 'le em';
+    if (!isMatch) return false;
+    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em') {
+      return isDevVerified;
+    }
+    return false;
+  }
+
+  function updateDevTagPreview(name) {
+    if (!devTagPreview) return;
+    if (isDeveloper(name)) {
+      devTagPreview.style.display = 'inline-flex';
+    } else {
+      devTagPreview.style.display = 'none';
+    }
+  }
+
+  function openDevPasscodeModal() {
+    if (!modalDevPasscode) return;
+    modalDevPasscode.classList.add('active');
+    if (devPasscodeInput) {
+      devPasscodeInput.value = '';
+      setTimeout(() => devPasscodeInput.focus(), 150);
+    }
+  }
+
+  function closeDevPasscodeModal() {
+    if (!modalDevPasscode) return;
+    modalDevPasscode.classList.remove('active');
+    if (devPasscodeInput) devPasscodeInput.value = '';
+  }
+
+  function handleVerifyPasscode() {
+    if (!devPasscodeInput) return;
+    const entered = devPasscodeInput.value.trim();
+    if (entered === '8119') {
+      isDevVerified = true;
+      playerProfile.isDev = true;
+      playerProfile.name = pendingDevName || 'Le Em';
+      inputPlayerName.value = playerProfile.name;
+      updateDevTagPreview(playerProfile.name);
+      closeDevPasscodeModal();
+      showToast('Developer verified! Welcome Le Em [DEV].', 'success');
+    } else {
+      devPasscodeInput.classList.add('shake-anim');
+      showToast('Incorrect developer passcode. Access denied.', 'error');
+      setTimeout(() => devPasscodeInput.classList.remove('shake-anim'), 400);
+      devPasscodeInput.value = '';
+    }
+  }
+
+  function handleCancelPasscode() {
+    isDevVerified = false;
+    playerProfile.isDev = false;
+    playerProfile.name = 'Player 1';
+    inputPlayerName.value = 'Player 1';
+    updateDevTagPreview('Player 1');
+    closeDevPasscodeModal();
+    showToast('Developer verification cancelled.', 'neutral');
+  }
+
+  if (btnVerifyPasscode) {
+    btnVerifyPasscode.addEventListener('click', handleVerifyPasscode);
+  }
+  if (btnCancelPasscode) {
+    btnCancelPasscode.addEventListener('click', handleCancelPasscode);
+  }
+  if (devPasscodeInput) {
+    devPasscodeInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        handleVerifyPasscode();
+      } else if (e.key === 'Escape') {
+        handleCancelPasscode();
       }
     });
   }
 
-  document.getElementById('btn-submit-invite').addEventListener('click', () => {
-    const code = inputInviteCode.value.trim();
-    if (code === DEFAULT_INVITATION_CODE) {
-      showScreen(screens.profile);
-    } else {
-      inputInviteCode.classList.add('shake-anim');
-      showToast('Invalid access code. Please check your invitation code.');
-      setTimeout(() => inputInviteCode.classList.remove('shake-anim'), 400);
-    }
-  });
-
   // Player Name input
   inputPlayerName.addEventListener('input', (e) => {
-    playerProfile.name = e.target.value.trim() || 'Player 1';
+    const raw = e.target.value;
+    const trimmed = raw.trim();
+    if (trimmed.toLowerCase() === 'le em') {
+      if (!isDevVerified) {
+        pendingDevName = trimmed;
+        openDevPasscodeModal();
+        return;
+      }
+    } else {
+      isDevVerified = false;
+      playerProfile.isDev = false;
+    }
+    playerProfile.name = trimmed || 'Player 1';
+    updateDevTagPreview(playerProfile.name);
   });
 
   // Profile Screen Actions
   document.getElementById('btn-nav-create').addEventListener('click', () => {
+    if (inputPlayerName.value.trim().toLowerCase() === 'le em' && !isDevVerified) {
+      pendingDevName = inputPlayerName.value.trim();
+      openDevPasscodeModal();
+      return;
+    }
     showScreen(screens.createLobby);
   });
 
   document.getElementById('btn-nav-join').addEventListener('click', () => {
+    if (inputPlayerName.value.trim().toLowerCase() === 'le em' && !isDevVerified) {
+      pendingDevName = inputPlayerName.value.trim();
+      openDevPasscodeModal();
+      return;
+    }
     showScreen(screens.joinLobby);
   });
 
   document.getElementById('btn-back-profile-1').addEventListener('click', () => showScreen(screens.profile));
   document.getElementById('btn-back-profile-2').addEventListener('click', () => showScreen(screens.profile));
 
+  // Mode Selection in Create Lobby: Free For All vs Team Mode
+  function updateCreateLobbyModeUI(mode) {
+    selectedCreateGameMode = mode;
+    if (mode === 'ffa') {
+      if (btnModeFfa) btnModeFfa.classList.add('active');
+      if (btnModeTeam) btnModeTeam.classList.remove('active');
+      if (selectMaxPlayers) {
+        selectMaxPlayers.innerHTML = `
+          <option value="2">2 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="3">3 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="4" selected>4 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="5">5 Players (13x13 Grid - Center: 6, 6)</option>
+          <option value="6">6 Players (17x17 Grid - Center: 8, 8)</option>
+          <option value="7">7 Players (19x19 Grid - Center: 9, 9)</option>
+          <option value="8">8 Players (23x23 Grid - Center: 11, 11)</option>
+        `;
+      }
+      if (lobbyModeHelperNote) {
+        lobbyModeHelperNote.textContent = 'Starting from 5 players, the board expands with an exact center goal (13x13, 17x17, 19x19, 23x23).';
+      }
+    } else {
+      if (btnModeTeam) btnModeTeam.classList.add('active');
+      if (btnModeFfa) btnModeFfa.classList.remove('active');
+      if (selectMaxPlayers) {
+        selectMaxPlayers.innerHTML = `
+          <option value="4" selected>4 Players (2 Teams - 11x11 Grid - Center: 5, 5)</option>
+          <option value="6">6 Players (3 Teams - 17x17 Grid - Center: 8, 8)</option>
+          <option value="8">8 Players (4 Teams - 23x23 Grid - Center: 11, 11)</option>
+        `;
+      }
+      if (lobbyModeHelperNote) {
+        lobbyModeHelperNote.textContent = '2 players per team. 4P on 11x11, 6P on 17x17, 8P on 23x23 grid with exact center goal.';
+      }
+    }
+  }
+
+  if (btnModeFfa) {
+    btnModeFfa.addEventListener('click', () => updateCreateLobbyModeUI('ffa'));
+  }
+  if (btnModeTeam) {
+    btnModeTeam.addEventListener('click', () => updateCreateLobbyModeUI('team'));
+  }
+
   // Create Lobby Confirm
   document.getElementById('btn-confirm-create').addEventListener('click', () => {
     isHost = true;
+    resetPlayerStatus();
+
+    const maxPlayers = parseInt(selectMaxPlayers.value, 10);
+    const chosenGridSize = getGridSizeForPlayerCount(maxPlayers);
+
+    setGridDimensions(chosenGridSize);
+
     roomState.code = generateRoomCode();
-    roomState.maxPlayers = parseInt(selectMaxPlayers.value);
+    roomState.gameMode = selectedCreateGameMode;
+    roomState.gridSize = chosenGridSize;
+    roomState.maxPlayers = maxPlayers;
     roomState.hostId = playerProfile.id;
     roomState.players = [playerProfile];
 
@@ -295,6 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const code = inputJoinCode.value.trim().toUpperCase();
     if (code.length === 6) {
       isHost = false;
+      resetPlayerStatus();
       roomState.code = code;
       roomState.players = [playerProfile];
       saveActiveSession();
@@ -335,10 +509,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     clearActiveSession();
     cleanupRoomData(roomState.code);
+    resetPlayerStatus();
 
     roomState = {
       code: '',
       hostId: '',
+      gameMode: 'ffa',
+      gridSize: 11,
       maxPlayers: 4,
       players: [],
       currentTurnIndex: 0,
@@ -346,9 +523,8 @@ document.addEventListener('DOMContentLoaded', () => {
       walls: [],
       winner: null
     };
-    playerProfile.isReady = false;
 
-    showScreen(screens.invite);
+    showScreen(screens.profile);
     showToast('Lobby closed and deleted.', 'neutral');
   });
 
@@ -524,6 +700,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         roomState = syncedRoomState;
+        const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+        setGridDimensions(gSize);
         
         // Update local playerProfile if host assigned a new unique color or ready status
         const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
@@ -596,6 +774,8 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       onGameStarted: (startedState) => {
         roomState = startedState;
+        const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+        setGridDimensions(gSize);
         saveActiveSession();
         launchActiveGame();
       },
@@ -616,9 +796,9 @@ document.addEventListener('DOMContentLoaded', () => {
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
-        playerProfile.isReady = false;
-        playerProfile.burnedOut = false;
-        playerProfile.isSpectating = false;
+        const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+        setGridDimensions(gSize);
+        resetPlayerStatus();
         saveActiveSession();
         renderBoardState();
         startTurnTimer();
@@ -666,6 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast(reason || 'Match ended.');
     clearActiveSession();
     cleanupRoomData(roomState.code);
+    resetPlayerStatus();
 
     if (joinTimeout) clearTimeout(joinTimeout);
     if (joinRetryInterval) clearInterval(joinRetryInterval);
@@ -673,6 +854,8 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState = {
       code: '',
       hostId: '',
+      gameMode: 'ffa',
+      gridSize: 11,
       maxPlayers: 4,
       players: [],
       currentTurnIndex: 0,
@@ -680,10 +863,9 @@ document.addEventListener('DOMContentLoaded', () => {
       walls: [],
       winner: null
     };
-    playerProfile.isReady = false;
 
     modalVictory.classList.remove('active');
-    showScreen(screens.invite);
+    showScreen(screens.profile);
   }
 
   function ensureUniquePlayerColor() {
@@ -763,6 +945,14 @@ document.addEventListener('DOMContentLoaded', () => {
     playerCountLabel.textContent = roomState.players.length;
     maxPlayersLabel.textContent = roomState.maxPlayers;
 
+    if (lobbyModeBadge) {
+      lobbyModeBadge.textContent = roomState.gameMode === 'team' ? 'Team Mode (2/team)' : 'Free For All';
+    }
+    if (lobbyGridBadge) {
+      const gSize = roomState.gridSize || (roomState.maxPlayers >= 5 ? 13 : 11);
+      lobbyGridBadge.textContent = `${gSize}x${gSize} Grid`;
+    }
+
     for (let i = 0; i < roomState.maxPlayers; i++) {
       const p = roomState.players[i];
       const slot = document.createElement('div');
@@ -771,6 +961,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (p) {
         const isPlayerHost = (p.id === roomState.hostId || i === 0);
         const isMe = (p.id === playerProfile.id);
+        const devBadgeHTML = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
 
         let badgeHTML = '';
         if (isPlayerHost) {
@@ -783,7 +974,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         slot.innerHTML = `
           <div class="player-slot-marble marble-${p.color}"></div>
-          <span class="player-slot-name">${escapeHTML(p.name)} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
+          <span class="player-slot-name">${escapeHTML(p.name)}${devBadgeHTML} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
           ${badgeHTML}
         `;
       } else {
@@ -853,14 +1044,58 @@ document.addEventListener('DOMContentLoaded', () => {
   btnStartGame.addEventListener('click', () => {
     if (!isHost && playerProfile.id !== roomState.hostId) return;
 
-    const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length);
+    // USER REQUIREMENT: Odd grid scaling with single exact center (11, 13, 17, 19, 23)
+    const numPlayers = roomState.players.length;
+    const activeGridSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(numPlayers, roomState.maxPlayers));
+    roomState.gridSize = activeGridSize;
+    setGridDimensions(activeGridSize);
+
+    // USER REQUIREMENT: Team mode with 2 players randomly assigned per team & sorted turn order
+    if (roomState.gameMode === 'team') {
+      const shuffled = [...roomState.players].sort(() => Math.random() - 0.5);
+
+      const teamConfigs = [
+        { id: 'A', name: 'Team A', badgeClass: 'team-badge-a' },
+        { id: 'B', name: 'Team B', badgeClass: 'team-badge-b' },
+        { id: 'C', name: 'Team C', badgeClass: 'team-badge-c' },
+        { id: 'D', name: 'Team D', badgeClass: 'team-badge-d' }
+      ];
+
+      const numTeams = Math.max(2, Math.floor(shuffled.length / 2));
+      const teamBuckets = [];
+      for (let t = 0; t < numTeams; t++) {
+        teamBuckets.push([]);
+      }
+
+      shuffled.forEach((p, idx) => {
+        const teamIdx = Math.floor(idx / 2);
+        const config = teamConfigs[Math.min(teamIdx, teamConfigs.length - 1)];
+        p.teamId = config.id;
+        p.teamName = config.name;
+        p.teamBadgeClass = config.badgeClass;
+        teamBuckets[Math.min(teamIdx, numTeams - 1)].push(p);
+      });
+
+      // Interleave turn order: Team A1 -> Team B1 -> (Team C1) -> (Team D1) -> Team A2 -> Team B2 -> ...
+      const interleaved = [];
+      for (let memberIdx = 0; memberIdx < 2; memberIdx++) {
+        for (let t = 0; t < numTeams; t++) {
+          if (teamBuckets[t][memberIdx]) {
+            interleaved.push(teamBuckets[t][memberIdx]);
+          }
+        }
+      }
+      roomState.players = interleaved;
+    }
+
+    const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length, activeGridSize);
 
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
+      p.turnOrder = idx + 1;
     });
 
-    // Randomize who starts the match
-    roomState.currentTurnIndex = Math.floor(Math.random() * roomState.players.length);
+    roomState.currentTurnIndex = 0;
     roomState.gameStarted = true;
     roomState.walls = [];
 
@@ -870,9 +1105,11 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --------------------------------------------------------------------------
-  // 11x11 Game Engine & Action Mode Controls
+  // Game Engine & Action Mode Controls
   // --------------------------------------------------------------------------
   function launchActiveGame() {
+    const activeGridSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+    setGridDimensions(activeGridSize);
     currentActionMode = 'MOVE';
     showScreen(screens.game);
     saveActiveSession();
@@ -880,16 +1117,21 @@ document.addEventListener('DOMContentLoaded', () => {
     startTurnTimer();
   }
 
-  function getOuterPerimeterSpawnPositions(numPlayers) {
+  function getOuterPerimeterSpawnPositions(numPlayers, gridSize = 11) {
+    const mid = Math.floor(gridSize / 2);
+    const max = gridSize - 1;
+    const q1 = Math.max(1, Math.round(gridSize * 0.25));
+    const q2 = max - q1;
+
     const presets = [
-      { r: 0, c: 5 },   // Top
-      { r: 10, c: 5 },  // Bottom
-      { r: 5, c: 0 },   // Left
-      { r: 5, c: 10 },  // Right
-      { r: 0, c: 2 },   // Top-Left
-      { r: 0, c: 8 },   // Top-Right
-      { r: 10, c: 2 },  // Bottom-Left
-      { r: 10, c: 8 }   // Bottom-Right
+      { r: 0, c: mid },   // Top Center
+      { r: max, c: mid },  // Bottom Center
+      { r: mid, c: 0 },   // Left Center
+      { r: mid, c: max },  // Right Center
+      { r: 0, c: q1 },    // Top Left offset
+      { r: 0, c: q2 },    // Top Right offset
+      { r: max, c: q1 },  // Bottom Left offset
+      { r: max, c: q2 }   // Bottom Right offset
     ];
     return presets.slice(0, numPlayers);
   }
@@ -977,47 +1219,84 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 3. Check if adjacent cell is occupied by another player
-      const occupyingPlayer = otherPlayers.find(p => p.pos.r === nr && p.pos.c === nc);
+      const firstOccupying = otherPlayers.find(p => p.pos.r === nr && p.pos.c === nc);
 
-      if (!occupyingPlayer) {
+      if (!firstOccupying) {
         // Normal 1-step move
         validMoves.push({ r: nr, c: nc, type: 'STEP' });
       } else {
-        // Occupied: Jump over opponent logic!
-        const straightR = nr + d.dr;
-        const straightC = nc + d.dc;
+        // Consecutive chain jump over 1, 2, or how many players are in front of them
+        let lastPlayerPos = { r: nr, c: nc };
+        let lastPlayerId = firstOccupying.id;
+        const jumpedPlayers = [firstOccupying];
+        const jumpedPositions = [{ r: nr, c: nc }];
+        let straightBlocked = false;
+        let scanR = nr;
+        let scanC = nc;
 
-        const isStraightInBounds = (straightR >= 0 && straightR < GRID_SIZE && straightC >= 0 && straightC < GRID_SIZE);
-        const isStraightWallBlocked = isStraightInBounds ? isMoveBlocked(nr, nc, straightR, straightC, walls) : true;
-        const isStraightOccupied = isStraightInBounds ? otherPlayers.some(p => p.pos.r === straightR && p.pos.c === straightC) : true;
+        while (true) {
+          const nextR = scanR + d.dr;
+          const nextC = scanC + d.dc;
 
-        if (isStraightInBounds && !isStraightWallBlocked && !isStraightOccupied) {
-          validMoves.push({
-            r: straightR,
-            c: straightC,
-            type: 'JUMP',
-            overPlayerId: occupyingPlayer.id,
-            overPos: { r: nr, c: nc }
-          });
-        } else {
-          // Straight jump is blocked by a wall behind opponent or board edge; allow diagonal jump to either side
+          // 3a. Check if movement from currently scanned player to next cell is blocked by a wall
+          if (isMoveBlocked(scanR, scanC, nextR, nextC, walls)) {
+            straightBlocked = true;
+            break;
+          }
+
+          // 3b. Check if next cell is within board boundaries
+          if (nextR < 0 || nextR >= GRID_SIZE || nextC < 0 || nextC >= GRID_SIZE) {
+            straightBlocked = true;
+            break;
+          }
+
+          // 3c. Check if next cell is occupied by another player
+          const nextOccupying = otherPlayers.find(p => p.pos.r === nextR && p.pos.c === nextC);
+          if (nextOccupying) {
+            // Consecutive chain continues over this player!
+            jumpedPlayers.push(nextOccupying);
+            jumpedPositions.push({ r: nextR, c: nextC });
+            lastPlayerPos = { r: nextR, c: nextC };
+            lastPlayerId = nextOccupying.id;
+            scanR = nextR;
+            scanC = nextC;
+          } else {
+            // Found unoccupied landing cell past the player(s)!
+            validMoves.push({
+              r: nextR,
+              c: nextC,
+              type: 'JUMP',
+              jumpCount: jumpedPlayers.length,
+              overPlayerId: lastPlayerId,
+              overPos: lastPlayerPos,
+              jumpedPositions: jumpedPositions
+            });
+            break;
+          }
+        }
+
+        // If straight landing is blocked by a wall behind the last opponent or board edge,
+        // allow diagonal jump to either side from the last jumped player's position
+        if (straightBlocked) {
           const perpendiculars = (d.dr !== 0)
             ? [{ pdr: 0, pdc: -1 }, { pdr: 0, pdc: 1 }]
             : [{ pdr: -1, pdc: 0 }, { pdr: 1, pdc: 0 }];
 
           perpendiculars.forEach(p => {
-            const diagR = nr + p.pdr;
-            const diagC = nc + p.pdc;
+            const diagR = lastPlayerPos.r + p.pdr;
+            const diagC = lastPlayerPos.c + p.pdc;
 
             if (diagR >= 0 && diagR < GRID_SIZE && diagC >= 0 && diagC < GRID_SIZE) {
-              if (!isMoveBlocked(nr, nc, diagR, diagC, walls)) {
+              if (!isMoveBlocked(lastPlayerPos.r, lastPlayerPos.c, diagR, diagC, walls)) {
                 if (!otherPlayers.some(pl => pl.pos.r === diagR && pl.pos.c === diagC)) {
                   validMoves.push({
                     r: diagR,
                     c: diagC,
                     type: 'DIAG_JUMP',
-                    overPlayerId: occupyingPlayer.id,
-                    overPos: { r: nr, c: nc }
+                    jumpCount: jumpedPlayers.length,
+                    overPlayerId: lastPlayerId,
+                    overPos: lastPlayerPos,
+                    jumpedPositions: jumpedPositions
                   });
                 }
               }
@@ -1065,6 +1344,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderBoardState() {
     boardGrid.innerHTML = '';
+    boardGrid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
+    boardGrid.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
 
     for (let r = 0; r < GRID_SIZE; r++) {
       for (let c = 0; c < GRID_SIZE; c++) {
@@ -1072,6 +1353,9 @@ document.addEventListener('DOMContentLoaded', () => {
         cell.className = 'grid-cell';
         cell.dataset.r = r;
         cell.dataset.c = c;
+
+        if (c === GRID_SIZE - 1) cell.classList.add('no-border-right');
+        if (r === GRID_SIZE - 1) cell.classList.add('no-border-bottom');
 
         if (r === GOAL_POS.r && c === GOAL_POS.c) {
           cell.classList.add('goal-cell');
@@ -1259,7 +1543,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const isMe = (activePlayer.id === playerProfile.id);
-    turnLabel.textContent = isMe ? "Your Turn!" : `${activePlayer.name}'s Turn`;
+    const devBadge = isDeveloper(activePlayer.name) ? '<span class="dev-badge">Dev</span>' : '';
+    const teamTag = (roomState.gameMode === 'team' && activePlayer.teamName) ? ` <span style="opacity:0.85; font-size:0.85em;">(${escapeHTML(activePlayer.teamName)})</span>` : '';
+
+    if (isMe) {
+      turnLabel.innerHTML = `Your Turn!${teamTag}`;
+    } else {
+      turnLabel.innerHTML = `${escapeHTML(activePlayer.name)}${devBadge}'s Turn${teamTag}`;
+    }
     turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
   }
 
@@ -1280,9 +1571,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // Check if clicking directly on a valid landing tile
       let targetMove = validMoves.find(m => m.r === r && m.c === c);
 
-      // Or if clicking on an adjacent opponent tile to jump over them
+      // Or if clicking on any opponent tile in the line of jump to jump over them
       if (!targetMove) {
-        targetMove = validMoves.find(m => m.overPos && m.overPos.r === r && m.overPos.c === c && m.type === 'JUMP');
+        targetMove = validMoves.find(m => m.jumpedPositions && m.jumpedPositions.some(jp => jp.r === r && jp.c === c) && m.type === 'JUMP');
+        if (!targetMove) {
+          targetMove = validMoves.find(m => m.jumpedPositions && m.jumpedPositions.some(jp => jp.r === r && jp.c === c));
+        }
         if (!targetMove) {
           targetMove = validMoves.find(m => m.overPos && m.overPos.r === r && m.overPos.c === c);
         }
@@ -1781,14 +2075,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function triggerVictory(winner, customSubtitle) {
     stopTurnTimer();
-    winnerTitle.textContent = `${winner.name} Wins!`;
-    winnerSubtitle.textContent = customSubtitle || `${winner.name} reached the golden center goal (5, 5)!`;
+    const isTeam = (roomState.gameMode === 'team' && winner.teamName);
+    winnerTitle.textContent = isTeam ? `${winner.teamName} Wins!` : `${winner.name} Wins!`;
+    const defaultSubtitle = isTeam
+      ? `${winner.name} led ${winner.teamName} to the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`
+      : `${winner.name} reached the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`;
+    winnerSubtitle.textContent = customSubtitle || defaultSubtitle;
 
-    // Reset member ready flags for the next round
+    // Reset member ready flags and burnout statuses when game ends
     roomState.players.forEach(p => {
       p.isReady = false;
+      p.burnedOut = false;
+      p.isSpectating = false;
     });
-    playerProfile.isReady = false;
+    resetPlayerStatus();
 
     renderVictoryUI();
     modalVictory.classList.add('active');
@@ -1817,6 +2117,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const isHostSlot = (p.id === roomState.hostId || idx === 0);
       const isMe = (p.id === playerProfile.id);
+      const devBadgeHTML = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+      const teamTag = (roomState.gameMode === 'team' && p.teamName) ? ` <span style="opacity:0.75; font-size:0.8em; color:var(--text-muted);">(${escapeHTML(p.teamName)})</span>` : '';
 
       let badgeHTML = '';
       if (isHostSlot) {
@@ -1829,7 +2131,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       slot.innerHTML = `
         <div class="player-slot-marble marble-${p.color}"></div>
-        <span class="player-slot-name">${escapeHTML(p.name)} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
+        <span class="player-slot-name">${escapeHTML(p.name)}${devBadgeHTML}${teamTag} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
         ${badgeHTML}
       `;
 
@@ -1889,9 +2191,44 @@ document.addEventListener('DOMContentLoaded', () => {
     const isPlayerHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
     if (!isPlayerHost) return;
 
-    const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length);
+    const activeGridSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+    setGridDimensions(activeGridSize);
+    roomState.gridSize = activeGridSize;
+
+    if (roomState.gameMode === 'team') {
+      const shuffled = [...roomState.players].sort(() => Math.random() - 0.5);
+      const teamConfigs = [
+        { id: 'A', name: 'Team A', badgeClass: 'team-badge-a' },
+        { id: 'B', name: 'Team B', badgeClass: 'team-badge-b' },
+        { id: 'C', name: 'Team C', badgeClass: 'team-badge-c' },
+        { id: 'D', name: 'Team D', badgeClass: 'team-badge-d' }
+      ];
+      const numTeams = Math.max(2, Math.floor(shuffled.length / 2));
+      const teamBuckets = [];
+      for (let t = 0; t < numTeams; t++) teamBuckets.push([]);
+      shuffled.forEach((p, idx) => {
+        const teamIdx = Math.floor(idx / 2);
+        const config = teamConfigs[Math.min(teamIdx, teamConfigs.length - 1)];
+        p.teamId = config.id;
+        p.teamName = config.name;
+        p.teamBadgeClass = config.badgeClass;
+        teamBuckets[Math.min(teamIdx, numTeams - 1)].push(p);
+      });
+      const interleaved = [];
+      for (let memberIdx = 0; memberIdx < 2; memberIdx++) {
+        for (let t = 0; t < numTeams; t++) {
+          if (teamBuckets[t][memberIdx]) {
+            interleaved.push(teamBuckets[t][memberIdx]);
+          }
+        }
+      }
+      roomState.players = interleaved;
+    }
+
+    const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length, activeGridSize);
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
+      p.turnOrder = idx + 1;
       p.isReady = false;
       p.burnedOut = false;
       p.isSpectating = false;
@@ -1901,7 +2238,7 @@ document.addEventListener('DOMContentLoaded', () => {
     playerProfile.burnedOut = false;
     playerProfile.isSpectating = false;
     roomState.walls = [];
-    roomState.currentTurnIndex = Math.floor(Math.random() * roomState.players.length);
+    roomState.currentTurnIndex = 0;
     roomState.winner = null;
 
     if (supabaseClient && roomState.code) {
@@ -1927,45 +2264,134 @@ document.addEventListener('DOMContentLoaded', () => {
       livePlayerCount.textContent = `${activeCount}/${roomState.players.length}`;
     }
 
-    roomState.players.forEach((p, idx) => {
-      const isCurrentTurn = (idx === roomState.currentTurnIndex && !p.burnedOut);
-      const isMe = (p.id === playerProfile.id);
-      const isBurned = !!p.burnedOut;
+    if (sidebarHeadingText) {
+      sidebarHeadingText.textContent = roomState.gameMode === 'team' ? 'TEAMS' : 'PLAYERS';
+    }
 
-      const card = document.createElement('div');
-      card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
+    const currentActivePlayer = roomState.players[roomState.currentTurnIndex];
 
-      let statusText = 'Waiting';
-      let statusClass = 'status-waiting';
-      if (isBurned) {
-        statusText = 'Burned Out';
-        statusClass = 'status-burned';
-      } else if (isCurrentTurn) {
-        statusText = isMe ? 'Your Turn!' : 'Taking Turn';
-        statusClass = 'status-turn';
-      }
+    if (roomState.gameMode === 'team') {
+      // USER REQUIREMENT: Team structure:
+      // Team A
+      // Player
+      // Player
+      // Team B
+      // Player
+      // Player
+      const teamMap = new Map();
+      roomState.players.forEach(p => {
+        const tId = p.teamId || 'A';
+        const tName = p.teamName || `Team ${tId}`;
+        const tBadge = p.teamBadgeClass || `team-badge-${tId.toLowerCase()}`;
+        if (!teamMap.has(tId)) {
+          teamMap.set(tId, { id: tId, name: tName, badgeClass: tBadge, players: [] });
+        }
+        teamMap.get(tId).players.push(p);
+      });
 
-      card.innerHTML = `
-        <div class="live-player-avatar-wrap">
-          <div class="live-player-marble marble-${p.color} ${isBurned ? 'charred-marble' : ''}">
-            ${isBurned ? '<svg class="burned-status-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>' : ''}
+      teamMap.forEach(team => {
+        const teamBlock = document.createElement('div');
+        teamBlock.className = 'team-group-block';
+
+        const isTeamActive = currentActivePlayer && (currentActivePlayer.teamId === team.id) && !currentActivePlayer.burnedOut;
+        if (isTeamActive) {
+          teamBlock.classList.add('team-turn-active');
+        }
+
+        const header = document.createElement('div');
+        header.className = 'team-group-header';
+        header.innerHTML = `
+          <span class="team-group-title ${team.badgeClass}">${escapeHTML(team.name)}</span>
+          ${isTeamActive ? '<span class="team-turn-indicator">ACTIVE TURN</span>' : ''}
+        `;
+        teamBlock.appendChild(header);
+
+        team.players.forEach(p => {
+          const isCurrentTurn = (p.id === currentActivePlayer?.id && !p.burnedOut);
+          const isMe = (p.id === playerProfile.id);
+          const isBurned = !!p.burnedOut;
+          const devBadge = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+
+          const card = document.createElement('div');
+          card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
+
+          let statusText = `Turn #${p.turnOrder || ''}`;
+          let statusClass = 'status-waiting';
+          if (isBurned) {
+            statusText = 'Burned Out';
+            statusClass = 'status-burned';
+          } else if (isCurrentTurn) {
+            statusText = isMe ? 'Your Turn!' : `Turn #${p.turnOrder}`;
+            statusClass = 'status-turn';
+          }
+
+          card.innerHTML = `
+            <div class="live-player-avatar-wrap">
+              <div class="live-player-marble marble-${p.color} ${isBurned ? 'charred-marble' : ''}">
+                ${isBurned ? '<svg class="burned-status-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>' : ''}
+              </div>
+              ${isCurrentTurn ? '<div class="turn-beacon"></div>' : ''}
+            </div>
+            <div class="live-player-details">
+              <div class="live-player-name-row">
+                <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
+                ${devBadge}
+                ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+              </div>
+              <div class="live-player-sub-row">
+                <span class="live-player-status-badge ${statusClass}">${statusText}</span>
+                ${p.pos && !isBurned ? `<span class="live-player-coords">(${p.pos.r}, ${p.pos.c})</span>` : ''}
+              </div>
+            </div>
+          `;
+          teamBlock.appendChild(card);
+        });
+
+        livePlayersList.appendChild(teamBlock);
+      });
+    } else {
+      roomState.players.forEach((p, idx) => {
+        const isCurrentTurn = (idx === roomState.currentTurnIndex && !p.burnedOut);
+        const isMe = (p.id === playerProfile.id);
+        const isBurned = !!p.burnedOut;
+        const devBadge = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+
+        const card = document.createElement('div');
+        card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
+
+        let statusText = 'Waiting';
+        let statusClass = 'status-waiting';
+        if (isBurned) {
+          statusText = 'Burned Out';
+          statusClass = 'status-burned';
+        } else if (isCurrentTurn) {
+          statusText = isMe ? 'Your Turn!' : 'Taking Turn';
+          statusClass = 'status-turn';
+        }
+
+        card.innerHTML = `
+          <div class="live-player-avatar-wrap">
+            <div class="live-player-marble marble-${p.color} ${isBurned ? 'charred-marble' : ''}">
+              ${isBurned ? '<svg class="burned-status-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>' : ''}
+            </div>
+            ${isCurrentTurn ? '<div class="turn-beacon"></div>' : ''}
           </div>
-          ${isCurrentTurn ? '<div class="turn-beacon"></div>' : ''}
-        </div>
-        <div class="live-player-details">
-          <div class="live-player-name-row">
-            <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
-            ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+          <div class="live-player-details">
+            <div class="live-player-name-row">
+              <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
+              ${devBadge}
+              ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+            </div>
+            <div class="live-player-sub-row">
+              <span class="live-player-status-badge ${statusClass}">${statusText}</span>
+              ${p.pos && !isBurned ? `<span class="live-player-coords">(${p.pos.r}, ${p.pos.c})</span>` : ''}
+            </div>
           </div>
-          <div class="live-player-sub-row">
-            <span class="live-player-status-badge ${statusClass}">${statusText}</span>
-            ${p.pos && !isBurned ? `<span class="live-player-coords">(${p.pos.r}, ${p.pos.c})</span>` : ''}
-          </div>
-        </div>
-      `;
+        `;
 
-      livePlayersList.appendChild(card);
-    });
+        livePlayersList.appendChild(card);
+      });
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -2011,7 +2437,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const burnSubtitle = document.getElementById('burn-modal-subtitle');
       if (burnSubtitle) {
-        if (roomState.players.length === 2) {
+        if (roomState.gameMode !== 'team' && roomState.players.length === 2) {
           burnSubtitle.textContent = 'You will surrender the match and your opponent will win.';
         } else {
           burnSubtitle.textContent = 'You will surrender from the match, your marble will incinerate, and you will spectate the rest of the game.';
@@ -2042,7 +2468,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!meInRoom || meInRoom.burnedOut) return;
 
     const burnedPos = meInRoom.pos ? { r: meInRoom.pos.r, c: meInRoom.pos.c } : null;
-    const isTwoPlayerGame = (roomState.players.length === 2);
+    const isTwoPlayerGame = (roomState.gameMode !== 'team' && roomState.players.length === 2);
 
     playerProfile.burnedOut = true;
     meInRoom.burnedOut = true;
@@ -2056,7 +2482,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.wall-preview').forEach(el => el.remove());
 
     if (isTwoPlayerGame) {
-      // ON 2 PLAYERS: BURNING OUT SURRENDERS THE GAME, NOT SPECTATING!
+      // ON 2 PLAYERS FFA: BURNING OUT SURRENDERS THE GAME, NOT SPECTATING!
       playerProfile.isSpectating = false;
       meInRoom.isSpectating = false;
 
@@ -2080,7 +2506,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // 3+ players: spectating mode
+    // 3+ players (or Team mode): spectating mode
     playerProfile.isSpectating = true;
     meInRoom.isSpectating = true;
 
@@ -2112,10 +2538,10 @@ document.addEventListener('DOMContentLoaded', () => {
       playPlayerBurnAnimation(data.burnedPos, data.playerId);
     }
 
-    const isTwoPlayerGame = (data.isSurrender || roomState.players.length === 2);
+    const isTwoPlayerGame = (data.isSurrender || (roomState.gameMode !== 'team' && roomState.players.length === 2));
 
     if (isTwoPlayerGame) {
-      // 2 players: remote player surrendered the match, ending the game
+      // 2 players FFA: remote player surrendered the match, ending the game
       p.isSpectating = false;
       showToast(`${p.name} surrendered the game!`, 'success');
 
@@ -2167,24 +2593,39 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function checkBurnOutWinCondition() {
     if (!roomState.gameStarted) return false;
-    const activePlayers = roomState.players.filter(p => !p.burnedOut);
-    if (activePlayers.length === 1) {
-      const winner = activePlayers[0];
-      const surrendered = roomState.players.filter(p => p.burnedOut).map(p => p.name).join(', ');
-      triggerVictory(winner, `${winner.name} Wins! ${surrendered} surrendered.`);
-      return true;
+
+    if (roomState.gameMode === 'team') {
+      const activePlayers = roomState.players.filter(p => !p.burnedOut);
+      const activeTeams = new Set(activePlayers.map(p => p.teamId));
+
+      if (activeTeams.size === 1) {
+        const winningTeamId = [...activeTeams][0];
+        const winner = activePlayers.find(p => p.teamId === winningTeamId) || activePlayers[0];
+        triggerVictory(winner, `${winner.teamName} Wins! All opposing teams burned out.`);
+        return true;
+      }
+      return false;
+    } else {
+      const activePlayers = roomState.players.filter(p => !p.burnedOut);
+      if (activePlayers.length === 1) {
+        const winner = activePlayers[0];
+        const surrendered = roomState.players.filter(p => p.burnedOut).map(p => p.name).join(', ');
+        triggerVictory(winner, `${winner.name} Wins! ${surrendered} surrendered.`);
+        return true;
+      }
+      return false;
     }
-    return false;
   }
 
   btnExitGame.addEventListener('click', () => {
+    resetPlayerStatus();
     const isPlayerHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
     if (isPlayerHost) {
       broadcastEvent('game_terminated', { reason: 'Host exited the game.' });
     } else {
       broadcastEvent('player_left', { playerId: playerProfile.id });
     }
-    terminateAndReturnToInvite('Returned to invitation menu.');
+    terminateAndReturnToInvite('Returned to main menu.');
   });
 
   function getCellElem(r, c) {

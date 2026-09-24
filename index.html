@@ -23,39 +23,15 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- =========================================================================
-       SCREEN 1: 6-DIGIT INVITATION CODE
+       SCREEN 2: PLAYER PROFILE & MENU (Default Entry Screen)
        ========================================================================= -->
-  <div id="screen-invite" class="screen active">
-    <div class="glass-card">
-      <h1 class="title-glow">WALLRUSH</h1>
-      <p class="subtitle">Enter 6-digit access code to enter the arena</p>
-
-      <div class="input-group">
-        <label for="invite-code">Invitation Code</label>
-        <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="invite-code" class="input-field code-input" maxlength="6" placeholder="••••••"
-            autocomplete="off" style="padding-right: 3.5rem;">
-          <button type="button" id="btn-toggle-invite-visibility" class="btn-icon"
-            style="position: absolute; right: 8px; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer;">Show</button>
-        </div>
-      </div>
-
-      <button id="btn-submit-invite" class="btn-primary">
-        <span>Enter Game</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- =========================================================================
-       SCREEN 2: PLAYER PROFILE & MENU
-       ========================================================================= -->
-  <div id="screen-profile" class="screen">
+  <div id="screen-profile" class="screen active">
     <div class="glass-card">
       <h2 class="title-glow">Player Profile</h2>
       <p class="subtitle">Choose your display name to start</p>
 
       <div class="input-group">
-        <label for="player-name">Your Name</label>
+        <label for="player-name">Your Name <span id="dev-tag-preview" class="dev-badge" style="display: none;">Dev</span></label>
         <input type="text" id="player-name" class="input-field" placeholder="Player 1" maxlength="15">
       </div>
 
@@ -70,19 +46,38 @@
   <div id="screen-create-lobby" class="screen">
     <div class="glass-card">
       <h2 class="title-glow">Create Lobby</h2>
-      <p class="subtitle">Select maximum players for this match</p>
+      <p class="subtitle">Select game mode and player capacity</p>
 
+      <!-- Game Mode Choice: Free For All vs Team Mode -->
       <div class="input-group">
-        <label for="max-players-select">Max Players (2 - 8)</label>
+        <label>Game Mode</label>
+        <div class="mode-toggle-group">
+          <button type="button" id="btn-mode-ffa" class="mode-toggle-btn active" data-mode="ffa">
+            <span class="mode-title">Free For All</span>
+            <span class="mode-desc">Every player for themselves</span>
+          </button>
+          <button type="button" id="btn-mode-team" class="mode-toggle-btn" data-mode="team">
+            <span class="mode-title">Team Mode</span>
+            <span class="mode-desc">2 players per team</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Max Players Dropdown -->
+      <div class="input-group">
+        <label for="max-players-select" id="max-players-label-text">Max Players (2 - 8)</label>
         <select id="max-players-select" class="input-field">
-          <option value="2">2 Players</option>
-          <option value="3">3 Players</option>
-          <option value="4" selected>4 Players</option>
-          <option value="5">5 Players</option>
-          <option value="6">6 Players</option>
-          <option value="7">7 Players</option>
-          <option value="8">8 Players</option>
+          <option value="2">2 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="3">3 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="4" selected>4 Players (11x11 Grid - Center: 5, 5)</option>
+          <option value="5">5 Players (13x13 Grid - Center: 6, 6)</option>
+          <option value="6">6 Players (17x17 Grid - Center: 8, 8)</option>
+          <option value="7">7 Players (19x19 Grid - Center: 9, 9)</option>
+          <option value="8">8 Players (23x23 Grid - Center: 11, 11)</option>
         </select>
+        <div id="lobby-mode-helper-note" class="lobby-helper-note">
+          Starting from 5 players, the board expands with an exact center goal (13x13, 17x17, 19x19, 23x23).
+        </div>
       </div>
 
       <button id="btn-confirm-create" class="btn-primary">Create Room</button>
@@ -123,6 +118,12 @@
           <span id="display-room-code" class="lobby-code-val">------</span>
         </div>
         <button id="btn-copy-link" class="btn-icon">Copy Invite Link</button>
+      </div>
+
+      <!-- Mode & Grid Info Badges -->
+      <div class="lobby-meta-badges">
+        <span id="lobby-mode-badge" class="badge-pill">Free For All</span>
+        <span id="lobby-grid-badge" class="badge-pill">11x11 Grid</span>
       </div>
 
       <!-- Color Selector Inside Lobby -->
@@ -187,7 +188,7 @@
                 <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                 <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
               </svg>
-              PLAYERS
+              <span id="sidebar-heading-text">PLAYERS</span>
             </div>
             <span id="live-player-count" class="live-player-badge">0</span>
           </div>
@@ -226,6 +227,26 @@
             <span class="hint-mobile"><span class="key-cap">Tap</span> Move Piece</span>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       MODAL: DEVELOPER PASSCODE FOR 'LE EM'
+       ========================================================================= -->
+  <div id="modal-dev-passcode" class="modal-overlay">
+    <div class="glass-card modal-card" style="max-width: 380px; text-align: center;">
+      <h3 class="title-glow" style="font-size: 1.35rem; margin-bottom: 0.35rem;">Developer Verification</h3>
+      <p class="subtitle" style="margin-bottom: 1.25rem;">Enter the security passcode to proceed as <strong>Le Em [DEV]</strong></p>
+      
+      <div class="input-group">
+        <label for="dev-passcode-input">Passcode</label>
+        <input type="password" id="dev-passcode-input" class="input-field code-input" maxlength="4" placeholder="••••" autocomplete="off" style="text-align: center; letter-spacing: 0.35em; font-size: 1.3rem; font-weight: 700;">
+      </div>
+
+      <div class="modal-btn-row" style="display: flex; gap: 0.75rem; margin-top: 1.25rem;">
+        <button type="button" id="btn-cancel-passcode" class="btn-secondary" style="flex: 1;">Cancel</button>
+        <button type="button" id="btn-verify-passcode" class="btn-primary" style="flex: 1;">Verify</button>
       </div>
     </div>
   </div>

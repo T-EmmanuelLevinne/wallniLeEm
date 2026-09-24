@@ -1,9 +1,17 @@
 /* ==========================================================================
-   WallRush 11x11 Client-Side BFS Pathfinding Engine
+   WallRush Dynamic BFS Pathfinding Engine (Supports 11x11 & 13x13+)
    ========================================================================== */
 
-const GRID_SIZE = 11;
-const GOAL_POS = { r: 5, c: 5 };
+let GRID_SIZE = 11;
+let GOAL_POS = { r: 5, c: 5 };
+
+/**
+ * Sets grid dimensions dynamically (e.g. 11 for 2-4 players, 13 for 5-8 players)
+ */
+function setGridDimensions(size) {
+  GRID_SIZE = size;
+  GOAL_POS = { r: Math.floor(size / 2), c: Math.floor(size / 2) };
+}
 
 /**
  * Checks if a movement from (r1, c1) to (r2, c2) is blocked by any wall.
@@ -30,12 +38,15 @@ function isMoveBlocked(r1, c1, r2, c2, walls) {
 }
 
 /**
- * BFS algorithm to verify if a player can reach the goal (5, 5).
+ * BFS algorithm to verify if a player can reach the goal.
  */
-function hasPathToGoal(startPos, walls) {
-  if (startPos.r === GOAL_POS.r && startPos.c === GOAL_POS.c) return true;
+function hasPathToGoal(startPos, walls, gridSize, goalPos) {
+  const gSize = gridSize || GRID_SIZE;
+  const gPos = goalPos || GOAL_POS;
 
-  const visited = Array.from({ length: GRID_SIZE }, () => Array(GRID_SIZE).fill(false));
+  if (startPos.r === gPos.r && startPos.c === gPos.c) return true;
+
+  const visited = Array.from({ length: gSize }, () => Array(gSize).fill(false));
   const queue = [{ r: startPos.r, c: startPos.c }];
   visited[startPos.r][startPos.c] = true;
 
@@ -49,7 +60,7 @@ function hasPathToGoal(startPos, walls) {
   while (queue.length > 0) {
     const curr = queue.shift();
 
-    if (curr.r === GOAL_POS.r && curr.c === GOAL_POS.c) {
+    if (curr.r === gPos.r && curr.c === gPos.c) {
       return true;
     }
 
@@ -58,7 +69,7 @@ function hasPathToGoal(startPos, walls) {
       const nc = curr.c + d.dc;
 
       // Check bounds
-      if (nr >= 0 && nr < GRID_SIZE && nc >= 0 && nc < GRID_SIZE) {
+      if (nr >= 0 && nr < gSize && nc >= 0 && nc < gSize) {
         if (!visited[nr][nc]) {
           // Check if movement between curr and neighbor is blocked by a wall
           if (!isMoveBlocked(curr.r, curr.c, nr, nc, walls)) {
@@ -74,18 +85,14 @@ function hasPathToGoal(startPos, walls) {
 }
 
 /**
- * Verifies if a proposed wall overlaps with existing walls.
+ * Verifies if a proposed wall overlaps with existing walls or board borders.
  */
-function isWallOverlapping(proposedWall, existingWalls) {
+function isWallOverlapping(proposedWall, existingWalls, gridSize) {
+  const gSize = gridSize || GRID_SIZE;
+
   // Check grid boundaries (walls span 2 cells)
-  if (proposedWall.orientation === 'H') {
-    if (proposedWall.r < 0 || proposedWall.r >= GRID_SIZE - 1 || proposedWall.c < 0 || proposedWall.c >= GRID_SIZE - 1) {
-      return true;
-    }
-  } else {
-    if (proposedWall.r < 0 || proposedWall.r >= GRID_SIZE - 1 || proposedWall.c < 0 || proposedWall.c >= GRID_SIZE - 1) {
-      return true;
-    }
+  if (proposedWall.r < 0 || proposedWall.r >= gSize - 1 || proposedWall.c < 0 || proposedWall.c >= gSize - 1) {
+    return true;
   }
 
   for (const wall of existingWalls) {
@@ -116,11 +123,14 @@ function isWallOverlapping(proposedWall, existingWalls) {
 }
 
 /**
- * Master validation: Checks if placing a wall is legal and leaves ALL players a valid path to (5, 5).
+ * Master validation: Checks if placing a wall is legal and leaves ALL players a valid path to center goal.
  */
-function isValidWallPlacement(proposedWall, existingWalls, playerPositions) {
+function isValidWallPlacement(proposedWall, existingWalls, playerPositions, gridSize, goalPos) {
+  const gSize = gridSize || GRID_SIZE;
+  const gPos = goalPos || GOAL_POS;
+
   // 1. Check boundary & overlap
-  if (isWallOverlapping(proposedWall, existingWalls)) {
+  if (isWallOverlapping(proposedWall, existingWalls, gSize)) {
     return { valid: false, reason: 'Wall overlaps with an existing wall or border!' };
   }
 
@@ -130,8 +140,8 @@ function isValidWallPlacement(proposedWall, existingWalls, playerPositions) {
   // 3. Test BFS path to goal for ALL active players
   for (const p of playerPositions) {
     if (!p || !p.pos) continue;
-    if (!hasPathToGoal(p.pos, simulatedWalls)) {
-      return { valid: false, reason: 'Path to yellow center goal must stay open for all players!' };
+    if (!hasPathToGoal(p.pos, simulatedWalls, gSize, gPos)) {
+      return { valid: false, reason: 'Path to golden center goal must stay open for all players!' };
     }
   }
 
@@ -140,5 +150,5 @@ function isValidWallPlacement(proposedWall, existingWalls, playerPositions) {
 
 // Export functions for browser / modular scope
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { GRID_SIZE, GOAL_POS, hasPathToGoal, isWallOverlapping, isValidWallPlacement, isMoveBlocked };
+  module.exports = { GRID_SIZE, GOAL_POS, setGridDimensions, hasPathToGoal, isWallOverlapping, isValidWallPlacement, isMoveBlocked };
 }
