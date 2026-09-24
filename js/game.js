@@ -434,30 +434,32 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnModeTeam) btnModeTeam.classList.remove('active');
       if (selectMaxPlayers) {
         selectMaxPlayers.innerHTML = `
-          <option value="2">2 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="3">3 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="4" selected>4 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="5">5 Players (13x13 Grid - Center: 6, 6)</option>
-          <option value="6">6 Players (17x17 Grid - Center: 8, 8)</option>
-          <option value="7">7 Players (19x19 Grid - Center: 9, 9)</option>
-          <option value="8">8 Players (23x23 Grid - Center: 11, 11)</option>
+          <option value="2">2 Players</option>
+          <option value="3">3 Players</option>
+          <option value="4" selected>4 Players</option>
+          <option value="5">5 Players</option>
+          <option value="6">6 Players</option>
+          <option value="7">7 Players</option>
+          <option value="8">8 Players</option>
         `;
       }
       if (lobbyModeHelperNote) {
-        lobbyModeHelperNote.textContent = 'Starting from 5 players, the board expands with an exact center goal (13x13, 17x17, 19x19, 23x23).';
+        lobbyModeHelperNote.style.display = 'none';
+        lobbyModeHelperNote.textContent = '';
       }
     } else {
       if (btnModeTeam) btnModeTeam.classList.add('active');
       if (btnModeFfa) btnModeFfa.classList.remove('active');
       if (selectMaxPlayers) {
         selectMaxPlayers.innerHTML = `
-          <option value="4" selected>4 Players (2 Teams - 11x11 Grid - Center: 5, 5)</option>
-          <option value="6">6 Players (3 Teams - 17x17 Grid - Center: 8, 8)</option>
-          <option value="8">8 Players (4 Teams - 23x23 Grid - Center: 11, 11)</option>
+          <option value="4" selected>4 Players (2 Teams)</option>
+          <option value="6">6 Players (3 Teams)</option>
+          <option value="8">8 Players (4 Teams)</option>
         `;
       }
       if (lobbyModeHelperNote) {
-        lobbyModeHelperNote.textContent = '2 players per team. 4P on 11x11, 6P on 17x17, 8P on 23x23 grid with exact center goal.';
+        lobbyModeHelperNote.style.display = 'none';
+        lobbyModeHelperNote.textContent = '';
       }
     }
   }

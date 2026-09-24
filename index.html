@@ -54,30 +54,28 @@
         <div class="mode-toggle-group">
           <button type="button" id="btn-mode-ffa" class="mode-toggle-btn active" data-mode="ffa">
             <span class="mode-title">Free For All</span>
-            <span class="mode-desc">Every player for themselves</span>
+            <span class="mode-desc">Solo</span>
           </button>
           <button type="button" id="btn-mode-team" class="mode-toggle-btn" data-mode="team">
             <span class="mode-title">Team Mode</span>
-            <span class="mode-desc">2 players per team</span>
+            <span class="mode-desc">2v2 Teams</span>
           </button>
         </div>
       </div>
 
       <!-- Max Players Dropdown -->
       <div class="input-group">
-        <label for="max-players-select" id="max-players-label-text">Max Players (2 - 8)</label>
+        <label for="max-players-select" id="max-players-label-text">Players</label>
         <select id="max-players-select" class="input-field">
-          <option value="2">2 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="3">3 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="4" selected>4 Players (11x11 Grid - Center: 5, 5)</option>
-          <option value="5">5 Players (13x13 Grid - Center: 6, 6)</option>
-          <option value="6">6 Players (17x17 Grid - Center: 8, 8)</option>
-          <option value="7">7 Players (19x19 Grid - Center: 9, 9)</option>
-          <option value="8">8 Players (23x23 Grid - Center: 11, 11)</option>
+          <option value="2">2 Players</option>
+          <option value="3">3 Players</option>
+          <option value="4" selected>4 Players</option>
+          <option value="5">5 Players</option>
+          <option value="6">6 Players</option>
+          <option value="7">7 Players</option>
+          <option value="8">8 Players</option>
         </select>
-        <div id="lobby-mode-helper-note" class="lobby-helper-note">
-          Starting from 5 players, the board expands with an exact center goal (13x13, 17x17, 19x19, 23x23).
-        </div>
+        <div id="lobby-mode-helper-note" class="lobby-helper-note" style="display: none;"></div>
       </div>
 
       <button id="btn-confirm-create" class="btn-primary">Create Room</button>
