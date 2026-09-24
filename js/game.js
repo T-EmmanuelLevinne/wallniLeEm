@@ -124,6 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const btnBurnOut = document.getElementById('btn-burn-out');
   const btnBurnOutText = document.getElementById('btn-burn-out-text');
+  const btnSukunaMode = document.getElementById('btn-sukuna-mode');
+  let isSukunaButtonRevealed = false;
+  let isSukunaModeActive = false;
   const modalBurnConfirm = document.getElementById('modal-burn-confirm');
   const btnCancelBurn = document.getElementById('btn-cancel-burn');
   const btnConfirmBurn = document.getElementById('btn-confirm-burn');
@@ -857,6 +860,18 @@ document.addEventListener('DOMContentLoaded', () => {
         saveActiveSession();
         renderBoardState();
       },
+      onPlayerSukunaMode: (data) => {
+        const p = roomState.players.find(pl => pl.id === data.playerId);
+        if (p) {
+          p.isSukuna = !!data.isSukuna;
+          if (data.isSukuna) {
+            p.sukunaTransformedAt = Date.now();
+            triggerSukunaAnimeVFX();
+            playAudio('audio/domainexpansion.mp3', 0.85);
+          }
+          renderBoardState();
+        }
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
@@ -1176,6 +1191,9 @@ document.addEventListener('DOMContentLoaded', () => {
     setGridDimensions(activeGridSize);
     currentActionMode = 'MOVE';
     showScreen(screens.game);
+    if (isSukunaButtonRevealed && btnSukunaMode) {
+      btnSukunaMode.style.display = 'inline-flex';
+    }
     saveActiveSession();
     renderBoardState();
     startTurnTimer();
@@ -1470,6 +1488,17 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cell) {
         const marble = document.createElement('div');
         marble.className = `marble-sphere marble-${p.color}`;
+
+        // Sukuna Mode Transformation Check
+        const isSukuna = !!(p.isSukuna || (p.id === playerProfile.id && isSukunaModeActive));
+        if (isSukuna) {
+          marble.classList.add('sukuna-transformed');
+          const tattooOverlay = document.createElement('div');
+          tattooOverlay.className = 'sukuna-tattoos-overlay';
+          const isFreshTransform = (Date.now() - (p.sukunaTransformedAt || 0) < 2400);
+          tattooOverlay.innerHTML = getSukunaTattooSvg(isFreshTransform);
+          marble.appendChild(tattooOverlay);
+        }
 
         const isMe = (p.id === playerProfile.id);
         if (isMe) {
@@ -2018,7 +2047,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }, { passive: false });
 
   window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
+    const tag = (e.target && e.target.tagName) ? e.target.tagName.toLowerCase() : '';
+    if (tag === 'input' || tag === 'textarea') return;
+
+    if (e.key.toLowerCase() === 's') {
+      if (isLeEmPlayer()) {
+        revealSukunaButton();
+      }
+    } else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
       toggleWallOrientation();
     } else if (e.key === 'Enter' || e.key === ' ') {
       if (currentActionMode === 'WALL') {
@@ -2752,6 +2788,210 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     terminateAndReturnToInvite('Returned to main menu.');
   });
+
+  // --------------------------------------------------------------------------
+  // Sukuna Mode System (Exclusive for Developer 'Le Em')
+  // --------------------------------------------------------------------------
+  function playAudio(path, volume = 0.85) {
+    try {
+      const audio = new Audio(path);
+      audio.volume = volume;
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn(`Audio playback for ${path} was prevented:`, err);
+        });
+      }
+      return audio;
+    } catch (e) {
+      console.warn(`Error playing ${path}:`, e);
+      return null;
+    }
+  }
+
+  function isLeEmPlayer() {
+    if (isDevVerified) return true;
+    if (playerProfile && playerProfile.isDev) return true;
+    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em') {
+      return true;
+    }
+    return false;
+  }
+
+  function revealSukunaButton() {
+    const btn = document.getElementById('btn-sukuna-mode');
+    if (!btn) return;
+
+    btn.style.display = 'inline-flex';
+    btn.classList.add('sukuna-unlocked-pop');
+    setTimeout(() => btn.classList.remove('sukuna-unlocked-pop'), 800);
+
+    // Play gambale.mp3
+    playAudio('audio/gambale.mp3', 0.95);
+
+    if (!isSukunaButtonRevealed) {
+      isSukunaButtonRevealed = true;
+      showToast('⛩️ Cursed energy stirred... Sukuna Mode unlocked!', 'success');
+    }
+  }
+
+  function handleSukunaModeToggle() {
+    if (!isLeEmPlayer()) return;
+
+    isSukunaModeActive = !isSukunaModeActive;
+    playerProfile.isSukuna = isSukunaModeActive;
+    if (isSukunaModeActive) {
+      playerProfile.sukunaTransformedAt = Date.now();
+    }
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (meInRoom) {
+      meInRoom.isSukuna = isSukunaModeActive;
+      if (isSukunaModeActive) {
+        meInRoom.sukunaTransformedAt = Date.now();
+      }
+    }
+
+    const btn = document.getElementById('btn-sukuna-mode');
+    if (btn) {
+      const textSpan = btn.querySelector('.sukuna-text');
+      if (isSukunaModeActive) {
+        btn.classList.add('active');
+        if (textSpan) textSpan.textContent = 'SUKUNA ACTIVE';
+      } else {
+        btn.classList.remove('active');
+        if (textSpan) textSpan.textContent = 'SUKUNA MODE';
+      }
+    }
+
+    if (isSukunaModeActive) {
+      // 1. Play domain expansion audio
+      playAudio('audio/domainexpansion.mp3', 0.95);
+
+      // 2. Trigger dramatic anime VFX sequence with cleave and dismantle
+      triggerSukunaAnimeVFX();
+    }
+
+    // 3. Broadcast to all peers in the room
+    broadcastEvent('player_sukuna_mode', {
+      playerId: playerProfile.id,
+      isSukuna: isSukunaModeActive
+    });
+
+    saveActiveSession();
+    renderBoardState();
+  }
+
+  function triggerSukunaAnimeVFX() {
+    const existing = document.querySelector('.sukuna-anime-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'sukuna-anime-overlay';
+    overlay.innerHTML = `
+      <div class="sukuna-domain-flash"></div>
+      <div class="sukuna-cleave-line sukuna-cleave-1"></div>
+      <div class="sukuna-cleave-line sukuna-cleave-2"></div>
+      <div class="sukuna-cleave-line sukuna-cleave-3"></div>
+      <div class="sukuna-anime-banner">
+        <div class="sukuna-banner-kanji">宿 儺</div>
+        <div class="sukuna-banner-title">SUKUNA MODE</div>
+        <div class="sukuna-banner-sub">RYŌIKI TENKAI</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    setTimeout(() => playAudio('audio/cleave.mp3', 0.7), 280);
+    setTimeout(() => playAudio('audio/dismantle.mp3', 0.65), 520);
+
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('sukuna-screen-shake');
+
+    setTimeout(() => {
+      gameScreen.classList.remove('sukuna-screen-shake');
+    }, 700);
+
+    setTimeout(() => {
+      overlay.remove();
+    }, 2200);
+  }
+
+  function getSukunaTattooSvg(isIntro = false) {
+    const animClass = isIntro ? 'sukuna-etch-anim' : '';
+    return `
+      <svg class="sukuna-tattoo-svg ${animClass}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <filter id="sukuna-eye-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+            <feMerge>
+              <feMergeNode in="coloredBlur"/>
+              <feMergeNode in="SourceGraphic"/>
+            </feMerge>
+          </filter>
+        </defs>
+
+        <g class="sukuna-ink-layer" fill="#0b0a10">
+          <!-- 1. FOREHEAD TRIDENT / CROWN MARK -->
+          <ellipse cx="50" cy="18" rx="2.4" ry="5.2" />
+          <path d="M 45 13 C 43 20 46 26 48 30 C 47.5 25 46 20 48 14 Z" />
+          <path d="M 55 13 C 57 20 54 26 52 30 C 52.5 25 54 20 52 14 Z" />
+          <path d="M 41 16 C 38 22 40 28 43 32 C 41.5 27 40 22 43.5 17 Z" />
+          <path d="M 59 16 C 62 22 60 28 57 32 C 58.5 27 60 22 56.5 17 Z" />
+
+          <!-- 2. EYEBROWS -->
+          <path d="M 27 34 Q 36 30 45 36 Q 36 33 27 34 Z" />
+          <path d="M 73 34 Q 64 30 55 36 Q 64 33 73 34 Z" />
+
+          <!-- 3. UPPER EYE CONTOURS -->
+          <path d="M 29 41 Q 37 37 45 42 Q 37 39 29 41 Z" />
+          <path d="M 71 41 Q 63 37 55 42 Q 63 39 71 41 Z" />
+
+          <!-- 4. NOSE BRIDGE TRIBAL STRIPE -->
+          <path d="M 37 53 Q 50 49 63 53 Q 50 56.5 37 53 Z" />
+
+          <!-- 5. CHEEK TRIBAL MARKS -->
+          <!-- Left Cheek -->
+          <path d="M 12 47 Q 22 49 26 53 Q 20 54 12 50 Z" />
+          <path d="M 16 54 Q 25 56 28 60 Q 22 61 16 57 Z" />
+          <!-- Right Cheek -->
+          <path d="M 88 47 Q 78 49 74 53 Q 80 54 88 50 Z" />
+          <path d="M 84 54 Q 75 56 72 60 Q 78 61 84 57 Z" />
+
+          <!-- 6. SECONDARY SLIT EYES (Under main eyes) -->
+          <path d="M 31 47 Q 37 51 43 47 Q 37 49 31 47 Z" />
+          <path d="M 57 47 Q 63 51 69 47 Q 63 49 57 47 Z" />
+
+          <!-- 7. MOUTH & GRIN -->
+          <path d="M 33 65 Q 50 78 67 65 Q 50 72 33 65 Z" />
+
+          <!-- 8. JAW & CHIN TRIBAL MARKINGS -->
+          <path d="M 24 67 Q 34 76 43 78 Q 34 73 24 67 Z" />
+          <path d="M 76 67 Q 66 76 57 78 Q 66 73 76 67 Z" />
+          <rect x="44.5" y="77" width="2.8" height="12" rx="1.2" />
+          <rect x="52.7" y="77" width="2.8" height="12" rx="1.2" />
+        </g>
+
+        <!-- Teeth highlight in grin -->
+        <path d="M 36 66 Q 50 74 64 66" stroke="#ffffff" stroke-width="1.8" fill="none" stroke-linecap="round" />
+
+        <!-- 4 GLOWING CRIMSON EYES -->
+        <circle cx="37" cy="41.5" r="3.2" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
+        <circle cx="37" cy="41.5" r="1.3" fill="#0a0a0f" />
+        <circle cx="63" cy="41.5" r="3.2" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
+        <circle cx="63" cy="41.5" r="1.3" fill="#0a0a0f" />
+
+        <!-- Lower Second Pair Slit Eyes (Glinting red) -->
+        <circle cx="37" cy="48.5" r="1.4" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
+        <circle cx="63" cy="48.5" r="1.4" fill="#ff0033" filter="url(#sukuna-eye-glow-filter)" />
+      </svg>
+    `;
+  }
+
+  if (btnSukunaMode) {
+    btnSukunaMode.addEventListener('click', () => {
+      handleSukunaModeToggle();
+    });
+  }
 
   function getCellElem(r, c) {
     return boardGrid.querySelector(`[data-r="${r}"][data-c="${c}"]`);

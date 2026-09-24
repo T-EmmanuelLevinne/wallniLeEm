@@ -717,6 +717,9 @@ select.input-field option {
   margin-top: 0.85rem;
   display: flex;
   justify-content: center;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
   width: 100%;
 }
 
@@ -2161,5 +2164,285 @@ select.input-field option {
   border: 1px solid rgba(56, 189, 248, 0.3);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* ==========================================================================
+   Sukuna Mode Button & Cursed Energy Effects (Le Em Dev Exclusive)
+   ========================================================================== */
+.btn-sukuna-mode {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  padding: 0.75rem 1.8rem;
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #100204 0%, #2b040a 50%, #150205 100%);
+  border: 1.5px solid #dc2626;
+  border-radius: 14px;
+  cursor: pointer;
+  overflow: hidden;
+  box-shadow: 0 0 16px rgba(220, 38, 38, 0.45), inset 0 0 10px rgba(185, 28, 28, 0.35);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.btn-sukuna-mode .sukuna-kanji {
+  font-family: 'Cinzel', 'Noto Serif JP', serif, var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+  letter-spacing: 0.05em;
+}
+
+.btn-sukuna-mode .sukuna-text {
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+}
+
+.btn-sukuna-mode:hover {
+  background: linear-gradient(135deg, #7f1d1d 0%, #dc2626 50%, #991b1b 100%);
+  border-color: #fca5a5;
+  box-shadow: 0 0 25px rgba(239, 68, 68, 0.8), inset 0 0 15px rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px) scale(1.03);
+}
+
+.btn-sukuna-mode:active {
+  transform: scale(0.96);
+}
+
+.btn-sukuna-mode.active {
+  background: linear-gradient(135deg, #450a0a 0%, #b91c1c 50%, #7f1d1d 100%);
+  border-color: #ff0033;
+  box-shadow: 0 0 30px rgba(255, 0, 51, 0.85), inset 0 0 15px rgba(255, 255, 255, 0.4);
+  animation: sukunaBtnPulse 1.5s infinite alternate ease-in-out;
+}
+
+@keyframes sukunaBtnPulse {
+  0% { box-shadow: 0 0 18px rgba(220, 38, 38, 0.6); }
+  100% { box-shadow: 0 0 35px rgba(255, 0, 51, 1), inset 0 0 15px rgba(255, 255, 255, 0.5); }
+}
+
+.sukuna-unlocked-pop {
+  animation: sukunaUnlockAnim 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+@keyframes sukunaUnlockAnim {
+  0% { transform: scale(0.3); opacity: 0; filter: drop-shadow(0 0 30px #ff0033); }
+  60% { transform: scale(1.15); opacity: 1; filter: drop-shadow(0 0 45px #dc2626); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Sukuna Transformed Marble Sphere */
+.marble-sphere.sukuna-transformed {
+  background: radial-gradient(circle at 35% 30%, #fecaca 0%, #ef4444 32%, #991b1b 68%, #180305 100%) !important;
+  box-shadow: 
+    0 0 20px rgba(220, 38, 38, 0.85),
+    0 0 40px rgba(127, 29, 29, 0.6),
+    inset -4px -4px 10px rgba(0, 0, 0, 0.9),
+    inset 4px 4px 8px rgba(254, 202, 202, 0.55) !important;
+  animation: sukuna-cursed-pulse 2s infinite alternate ease-in-out !important;
+  z-index: 12 !important;
+}
+
+@keyframes sukuna-cursed-pulse {
+  0% {
+    box-shadow: 0 0 18px rgba(220, 38, 38, 0.75), 0 0 35px rgba(127, 29, 29, 0.5), inset -4px -4px 10px rgba(0, 0, 0, 0.85);
+  }
+  100% {
+    box-shadow: 0 0 30px rgba(255, 0, 51, 1), 0 0 60px rgba(185, 28, 28, 0.85), inset -4px -4px 10px rgba(0, 0, 0, 0.95);
+  }
+}
+
+.sukuna-tattoos-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 15;
+}
+
+.sukuna-tattoo-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.sukuna-etch-anim {
+  animation: sukunaTattooFadeIn 1.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sukunaTattooFadeIn {
+  0% {
+    opacity: 0;
+    filter: drop-shadow(0 0 20px #ff0033) brightness(3.5);
+    transform: scale(1.25);
+  }
+  35% {
+    opacity: 0.85;
+    filter: drop-shadow(0 0 25px #dc2626) brightness(2.2);
+    transform: scale(1.08);
+  }
+  70% {
+    opacity: 1;
+    filter: drop-shadow(0 0 10px #b91c1c) brightness(1.3);
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    filter: drop-shadow(0 0 4px rgba(220, 38, 38, 0.85)) brightness(1);
+    transform: scale(1);
+  }
+}
+
+/* Fullscreen Anime Transformation Overlay */
+.sukuna-anime-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 99999;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Red Vignette & Domain Flash */
+.sukuna-domain-flash {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.3) 0%, rgba(20, 2, 5, 0.85) 75%, rgba(0, 0, 0, 0.95) 100%);
+  animation: sukunaFlash 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sukunaFlash {
+  0% { opacity: 0; transform: scale(1.15); }
+  20% { opacity: 1; transform: scale(1); }
+  75% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+/* Slash Cuts across screen (Cleave & Dismantle) */
+.sukuna-cleave-line {
+  position: absolute;
+  width: 140%;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, #ffffff 40%, #ff0033 60%, transparent);
+  box-shadow: 0 0 15px #ff0033, 0 0 30px #dc2626;
+  opacity: 0;
+}
+
+.sukuna-cleave-1 {
+  top: 35%;
+  left: -20%;
+  transform: rotate(-18deg);
+  animation: sukunaSlash 0.5s 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.sukuna-cleave-2 {
+  top: 55%;
+  left: -20%;
+  transform: rotate(22deg);
+  animation: sukunaSlash 0.5s 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.sukuna-cleave-3 {
+  top: 45%;
+  left: -20%;
+  transform: rotate(-6deg);
+  animation: sukunaSlash 0.5s 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sukunaSlash {
+  0% { opacity: 0; transform: scaleX(0); }
+  40% { opacity: 1; transform: scaleX(1); filter: brightness(2.5); }
+  100% { opacity: 0; transform: scaleX(1.1); }
+}
+
+/* Anime Title Banner */
+.sukuna-anime-banner {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  animation: sukunaBannerPop 2.1s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sukunaBannerPop {
+  0% { opacity: 0; transform: scale(0.6) translateY(30px); filter: blur(10px); }
+  22% { opacity: 1; transform: scale(1.05) translateY(0); filter: blur(0); }
+  32% { transform: scale(1); }
+  80% { opacity: 1; transform: scale(1); filter: blur(0); }
+  100% { opacity: 0; transform: scale(1.2) translateY(-20px); filter: blur(8px); }
+}
+
+.sukuna-banner-kanji {
+  font-family: 'Cinzel', 'Noto Serif JP', serif, var(--font-heading);
+  font-size: 5.5rem;
+  font-weight: 900;
+  letter-spacing: 0.35em;
+  color: #ffffff;
+  text-shadow: 
+    0 0 20px #ff0033,
+    0 0 45px #dc2626,
+    0 0 85px #7f1d1d;
+  line-height: 1;
+}
+
+.sukuna-banner-title {
+  font-family: var(--font-heading);
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: 0.3em;
+  color: #ff3355;
+  text-shadow: 0 0 15px rgba(255, 0, 51, 0.85);
+  margin-top: 0.5rem;
+  text-transform: uppercase;
+}
+
+.sukuna-banner-sub {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.4em;
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 0.3rem;
+  text-transform: uppercase;
+}
+
+/* Screen Shake Animation */
+.sukuna-screen-shake {
+  animation: sukunaShakeAnim 0.7s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+@keyframes sukunaShakeAnim {
+  10%, 90% { transform: translate3d(-3px, 0, 0); }
+  20%, 80% { transform: translate3d(4px, 2px, 0); }
+  30%, 50%, 70% { transform: translate3d(-6px, -4px, 0); }
+  40%, 60% { transform: translate3d(6px, 4px, 0); }
+}
+
+@media (max-width: 480px) {
+  .btn-sukuna-mode {
+    padding: 0.65rem 1.2rem;
+    font-size: 0.82rem;
+  }
+  .sukuna-banner-kanji {
+    font-size: 3.8rem;
+  }
+  .sukuna-banner-title {
+    font-size: 1.6rem;
+  }
 }
 
