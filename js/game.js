@@ -50,6 +50,14 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   let currentActionMode = 'MOVE'; // 'MOVE' or 'WALL'
+  let lastMoveAnimation = null; // { playerId, from: { r, c }, to: { r, c }, isJump: boolean, color: string }
+  let lastPlacedWall = null;    // { r, c, orientation, color, playerId }
+  let isDraggingWall = false;
+  let lastWallPlacementTime = 0;
+  let activeDragHud = null;
+  let activeTouchBeacon = null;
+  let activeCrosshairs = { h: null, v: null };
+  let lastGuidePos = { clientX: 0, clientY: 0 };
 
   // --------------------------------------------------------------------------
   // DOM Element References & Toast System
@@ -96,8 +104,18 @@ document.addEventListener('DOMContentLoaded', () => {
   const turnTimerBadge = document.getElementById('turn-timer-badge');
   const turnTimerSeconds = document.getElementById('turn-timer-seconds');
 
+  const btnBurnOut = document.getElementById('btn-burn-out');
+  const btnBurnOutText = document.getElementById('btn-burn-out-text');
+  const modalBurnConfirm = document.getElementById('modal-burn-confirm');
+  const btnCancelBurn = document.getElementById('btn-cancel-burn');
+  const btnConfirmBurn = document.getElementById('btn-confirm-burn');
+  const livePlayersList = document.getElementById('live-players-list');
+  const livePlayerCount = document.getElementById('live-player-count');
+
   let turnTimerInterval = null;
   let turnTimeRemaining = 30;
+  let isReconnectingActive = false;
+  let reconnectTimeout = null;
 
   function showToast(message, type = 'error') {
     const container = document.getElementById('toast-container');
@@ -114,7 +132,7 @@ document.addEventListener('DOMContentLoaded', () => {
       toast.style.transform = 'translateY(-20px)';
       toast.style.transition = 'all 0.3s ease';
       setTimeout(() => toast.remove(), 300);
-    }, 3000);
+    }, 3200);
   }
 
   // --------------------------------------------------------------------------
@@ -129,16 +147,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // Session Recovery & Reconnection Engine
   // --------------------------------------------------------------------------
   function saveActiveSession() {
-    if (roomState.code && playerProfile.id) {
+    // Only save session if the match has already started (is already playing)
+    // If a lobby is still in waiting room, it should not persist or be reconnected to
+    if (roomState.code && playerProfile.id && roomState.gameStarted) {
       try {
         localStorage.setItem('wallrush_active_session', JSON.stringify({
           roomCode: roomState.code,
           playerProfile: playerProfile,
           isHost: isHost,
-          gameStarted: roomState.gameStarted,
+          gameStarted: true,
           timestamp: Date.now()
         }));
       } catch (e) {}
+    } else {
+      clearActiveSession();
     }
   }
 
@@ -158,22 +180,59 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Auto-Rejoin detection if browser tab was accidentally closed or refreshed
+  // Requirement: Only reconnect to an existing match that is already playing!
   const savedSessionRaw = localStorage.getItem('wallrush_active_session');
   if (savedSessionRaw && !directJoinCode) {
     try {
       const session = JSON.parse(savedSessionRaw);
-      // Valid within last 2 hours
-      if (session && session.roomCode && (Date.now() - (session.timestamp || 0) < 2 * 60 * 60 * 1000)) {
-        playerProfile = session.playerProfile || playerProfile;
-        isHost = !!session.isHost;
-        roomState.code = session.roomCode;
-        roomState.gameStarted = !!session.gameStarted;
-        showToast(`Rejoining match ${session.roomCode}...`, 'success');
-        enterLobbyRoom(true);
+      // Valid within last 2 hours AND only if match was already playing
+      if (session && session.roomCode && session.gameStarted && (Date.now() - (session.timestamp || 0) < 2 * 60 * 60 * 1000)) {
+        attemptReconnection(session);
+      } else {
+        clearActiveSession();
       }
     } catch (e) {
       clearActiveSession();
     }
+  }
+
+  function attemptReconnection(session) {
+    isReconnectingActive = true;
+    playerProfile = session.playerProfile || playerProfile;
+    isHost = !!session.isHost;
+    roomState.code = session.roomCode;
+    roomState.gameStarted = true;
+
+    showToast(`Reconnecting to active match ${session.roomCode}...`, 'neutral');
+
+    // Strict 3.5s verification timeout: if no active players reply, abandon reconnection cleanly
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(() => {
+      failReconnection(`Cannot reconnect: Match ${session.roomCode} no longer exists or has ended.`);
+    }, 3500);
+
+    enterLobbyRoom(true);
+  }
+
+  function failReconnection(reason) {
+    isReconnectingActive = false;
+    if (reconnectTimeout) {
+      clearTimeout(reconnectTimeout);
+      reconnectTimeout = null;
+    }
+    if (joinRetryInterval) {
+      clearInterval(joinRetryInterval);
+      joinRetryInterval = null;
+    }
+    clearActiveSession();
+    cleanupRoomData(roomState.code);
+
+    roomState.code = '';
+    roomState.players = [];
+    roomState.gameStarted = false;
+
+    showToast(reason || 'Match is no longer available.', 'error');
+    showScreen(screens.invite);
   }
 
   // --------------------------------------------------------------------------
@@ -261,10 +320,48 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-leave-lobby').addEventListener('click', () => {
     if (joinTimeout) clearTimeout(joinTimeout);
     if (joinRetryInterval) clearInterval(joinRetryInterval);
-    broadcastEvent('player_left', { playerId: playerProfile.id });
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+
+    const isOnlyPlayer = (roomState.players.length <= 1);
+    const wasHost = isHost || (roomState.hostId === playerProfile.id);
+
+    // USER REQUIREMENT: "when i leave this lobby ONLY, it should no longer exist and deleted."
+    if (isOnlyPlayer || wasHost) {
+      broadcastEvent('game_terminated', { reason: 'Lobby closed and deleted.' });
+      cleanupRoomData(roomState.code);
+    } else {
+      broadcastEvent('player_left', { playerId: playerProfile.id });
+    }
+
     clearActiveSession();
     cleanupRoomData(roomState.code);
+
+    roomState = {
+      code: '',
+      hostId: '',
+      maxPlayers: 4,
+      players: [],
+      currentTurnIndex: 0,
+      gameStarted: false,
+      walls: [],
+      winner: null
+    };
+    playerProfile.isReady = false;
+
     showScreen(screens.invite);
+    showToast('Lobby closed and deleted.', 'neutral');
+  });
+
+  // Automatically delete empty lobby if tab is closed or user leaves while alone in waiting room
+  window.addEventListener('beforeunload', () => {
+    if (roomState.code) {
+      const isOnlyPlayer = (roomState.players.length <= 1);
+      if (isOnlyPlayer && !roomState.gameStarted) {
+        clearActiveSession();
+        cleanupRoomData(roomState.code);
+        broadcastEvent('game_terminated', { reason: 'Lobby closed and deleted.' });
+      }
+    }
   });
 
   // --------------------------------------------------------------------------
@@ -274,7 +371,8 @@ document.addEventListener('DOMContentLoaded', () => {
     displayRoomCode.textContent = roomState.code;
     maxPlayersLabel.textContent = roomState.maxPlayers;
     
-    if (!roomState.gameStarted) {
+    // Only display waiting room screen if NOT a reconnection attempt (avoid showing empty 0/4 lobby!)
+    if (!roomState.gameStarted && !isReconnecting) {
       showScreen(screens.lobbyRoom);
     }
 
@@ -287,8 +385,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize Realtime messaging channel
     joinGameRoomChannel(roomState.code, playerProfile, {
       onSubscribed: () => {
-        if (!isHost) {
-          const evt = isReconnecting ? 'room_reconnect' : 'room_join_request';
+        if (isReconnecting) {
+          broadcastEvent('room_reconnect_query', { playerId: playerProfile.id });
+          broadcastEvent('room_reconnect', playerProfile);
+        } else if (!isHost) {
+          const evt = 'room_join_request';
           broadcastEvent(evt, playerProfile);
           joinRetryInterval = setInterval(() => {
             if (roomState.players.length > 1 || isHost) {
@@ -298,6 +399,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
           }, 800);
         } else {
+          broadcastEvent('room_sync', roomState);
+        }
+      },
+      onRoomReconnectQuery: (queryData) => {
+        // Any active participant in the room responds to reconnect query with room_sync
+        if (roomState.code && roomState.players.length > 0 && queryData.playerId !== playerProfile.id) {
           broadcastEvent('room_sync', roomState);
         }
       },
@@ -323,10 +430,29 @@ document.addEventListener('DOMContentLoaded', () => {
       onRoomReconnect: (reconnectingPlayer) => {
         if (isHost) {
           const existing = roomState.players.find(p => p.id === reconnectingPlayer.id);
-          if (existing) {
-            existing.name = reconnectingPlayer.name || existing.name;
-          } else if (roomState.players.length < roomState.maxPlayers) {
-            roomState.players.push(reconnectingPlayer);
+          if (roomState.gameStarted) {
+            // USER REQUIREMENT: "it reconnected, it can only spectate as well."
+            if (existing) {
+              existing.burnedOut = true;
+              existing.isSpectating = true;
+              existing.pos = null;
+            } else {
+              roomState.players.push({
+                ...reconnectingPlayer,
+                burnedOut: true,
+                isSpectating: true,
+                pos: null
+              });
+            }
+            if (roomState.players[roomState.currentTurnIndex]?.id === reconnectingPlayer.id) {
+              roomState.currentTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+            }
+          } else {
+            if (existing) {
+              existing.name = reconnectingPlayer.name || existing.name;
+            } else if (roomState.players.length < roomState.maxPlayers) {
+              roomState.players.push(reconnectingPlayer);
+            }
           }
           saveActiveSession();
           broadcastEvent('room_sync', roomState);
@@ -335,9 +461,67 @@ document.addEventListener('DOMContentLoaded', () => {
           }
         }
       },
+      onPresenceSync: (presenceState) => {
+        if (isReconnectingActive && presenceState) {
+          const others = Object.keys(presenceState).filter(k => k !== playerProfile.id);
+          if (others.length === 0) {
+            setTimeout(() => {
+              if (isReconnectingActive) {
+                failReconnection(`Cannot reconnect: Match ${roomState.code} has no other active players.`);
+              }
+            }, 2500);
+          }
+        }
+      },
       onRoomSync: (syncedRoomState) => {
         if (joinTimeout) clearTimeout(joinTimeout);
         if (joinRetryInterval) clearInterval(joinRetryInterval);
+
+        if (isReconnectingActive) {
+          // Check that there are active players left in the match
+          const anyOtherPlayers = (syncedRoomState.players || []).filter(p => p.id !== playerProfile.id);
+
+          if (anyOtherPlayers.length === 0) {
+            failReconnection(`Cannot reconnect: Match ${syncedRoomState.code} has no active players left.`);
+            return;
+          }
+
+          isReconnectingActive = false;
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+            reconnectTimeout = null;
+          }
+
+          // USER REQUIREMENT: "Dont remove the thing reconnecting to existing lobby that is already playing, it reconnected, it can only spectate as well."
+          if (syncedRoomState.gameStarted) {
+            playerProfile.burnedOut = true;
+            playerProfile.isSpectating = true;
+
+            const meInRoom = syncedRoomState.players.find(p => p.id === playerProfile.id);
+            if (meInRoom) {
+              meInRoom.burnedOut = true;
+              meInRoom.isSpectating = true;
+              meInRoom.pos = null;
+            } else {
+              syncedRoomState.players.push({
+                ...playerProfile,
+                burnedOut: true,
+                isSpectating: true,
+                pos: null
+              });
+            }
+
+            // If it was supposed to be this player's turn, advance turn so match continues
+            if (syncedRoomState.currentTurnIndex < syncedRoomState.players.length &&
+                syncedRoomState.players[syncedRoomState.currentTurnIndex].id === playerProfile.id) {
+              syncedRoomState.currentTurnIndex = getNextActiveTurnIndex(syncedRoomState.currentTurnIndex);
+            }
+
+            showToast(`Reconnected to live match ${syncedRoomState.code}! You are spectating.`, 'neutral');
+          } else {
+            showToast(`Reconnected to match ${syncedRoomState.code}!`, 'success');
+          }
+        }
 
         roomState = syncedRoomState;
         
@@ -347,6 +531,8 @@ document.addEventListener('DOMContentLoaded', () => {
           playerProfile.color = meInRoom.color;
           playerProfile.hex = meInRoom.hex;
           playerProfile.isReady = !!meInRoom.isReady;
+          playerProfile.burnedOut = !!meInRoom.burnedOut;
+          playerProfile.isSpectating = !!meInRoom.isSpectating;
         }
 
         saveActiveSession();
@@ -358,6 +544,7 @@ document.addEventListener('DOMContentLoaded', () => {
             renderBoardState();
           }
         } else {
+          showScreen(screens.lobbyRoom);
           renderLobbySlotsUI();
           renderLobbyColorPickerUI();
         }
@@ -365,6 +552,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (modalVictory && modalVictory.classList.contains('active')) {
           renderVictoryUI();
         }
+      },
+      onPlayerBurnOut: (data) => {
+        handleRemotePlayerBurnOut(data);
       },
       onPlayerColorChanged: (data) => {
         const p = roomState.players.find(pl => pl.id === data.playerId);
@@ -427,6 +617,8 @@ document.addEventListener('DOMContentLoaded', () => {
         modalVictory.classList.remove('active');
         roomState = resetState;
         playerProfile.isReady = false;
+        playerProfile.burnedOut = false;
+        playerProfile.isSpectating = false;
         saveActiveSession();
         renderBoardState();
         startTurnTimer();
@@ -435,12 +627,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!isHost && !isReconnecting) {
       joinTimeout = setTimeout(() => {
-        if (roomState.players.length === 1 && !isHost) {
+        if (roomState.players.length <= 1 && !isHost) {
           if (joinRetryInterval) clearInterval(joinRetryInterval);
+          clearActiveSession();
+          cleanupRoomData(roomState.code);
           showToast('Invalid room code. Please verify the code and try again.');
           showScreen(screens.joinLobby);
         }
-      }, 6000);
+      }, 5000);
     }
   }
 
@@ -701,14 +895,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function setActionMode(mode) {
+    if (playerProfile.burnedOut) return;
     currentActionMode = mode;
     if (mode === 'MOVE') {
       if (btnModeMove) btnModeMove.classList.add('active');
       if (btnModeWall) btnModeWall.classList.remove('active');
       if (btnRotateWall) btnRotateWall.style.display = 'none';
-      document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+      clearWallDragGuide();
       
-      const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id);
+      const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id && !playerProfile.burnedOut);
       if (isMyTurn) {
         showMoveHighlights();
       }
@@ -732,12 +927,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function toggleWallOrientation() {
+    if (playerProfile.burnedOut) return;
     wallPlacementState.orientation = (wallPlacementState.orientation === 'H') ? 'V' : 'H';
     if (btnRotateWall) {
       btnRotateWall.textContent = `Rotate (${wallPlacementState.orientation})`;
     }
-    if (currentActionMode === 'WALL' && wallPlacementState.hoverR >= 0 && wallPlacementState.hoverC >= 0) {
-      renderWallPreview(wallPlacementState.hoverR, wallPlacementState.hoverC);
+    if (currentActionMode === 'WALL') {
+      if (isDraggingWall || activeDragHud) {
+        renderWallDragGuide(lastGuidePos.clientX, lastGuidePos.clientY, wallPlacementState.hoverR, wallPlacementState.hoverC);
+      } else if (wallPlacementState.hoverR >= 0 && wallPlacementState.hoverC >= 0) {
+        renderWallPreview(wallPlacementState.hoverR, wallPlacementState.hoverC);
+      }
     }
   }
 
@@ -748,11 +948,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getValidMovesForPlayer(player, currentRoomState) {
-    if (!player || !player.pos) return [];
+    if (!player || !player.pos || player.burnedOut) return [];
 
     const currPos = player.pos;
     const walls = currentRoomState.walls || [];
-    const otherPlayers = (currentRoomState.players || []).filter(p => p.id !== player.id && p.pos);
+    const otherPlayers = (currentRoomState.players || []).filter(p => p.id !== player.id && p.pos && !p.burnedOut);
     const validMoves = [];
 
     const directions = [
@@ -832,9 +1032,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showMoveHighlights() {
     clearMoveHighlights();
+    if (playerProfile.burnedOut) return;
 
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos) {
+    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos || activePlayer.burnedOut) {
       return;
     }
 
@@ -848,6 +1049,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     });
+  }
+
+  function getNextActiveTurnIndex(fromIndex) {
+    const total = roomState.players.length;
+    if (total <= 1) return 0;
+    for (let step = 1; step <= total; step++) {
+      const idx = (fromIndex + step) % total;
+      if (!roomState.players[idx].burnedOut) {
+        return idx;
+      }
+    }
+    return fromIndex;
   }
 
   function renderBoardState() {
@@ -874,10 +1087,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id);
+    // Spawn ghost trail marker at previous position if a move just occurred
+    if (lastMoveAnimation && lastMoveAnimation.from) {
+      const fromCell = getCellElem(lastMoveAnimation.from.r, lastMoveAnimation.from.c);
+      if (fromCell) {
+        const trail = document.createElement('div');
+        trail.className = `move-trail-marker ripple-${lastMoveAnimation.color || 'blue'}`;
+        fromCell.appendChild(trail);
+        setTimeout(() => trail.remove(), 600);
+      }
+    }
+
+    const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id && !playerProfile.burnedOut);
 
     roomState.players.forEach(p => {
-      if (!p.pos) return;
+      if (!p.pos || p.burnedOut) return;
       const cell = getCellElem(p.pos.r, p.pos.c);
       if (cell) {
         const marble = document.createElement('div');
@@ -891,20 +1115,66 @@ document.addEventListener('DOMContentLoaded', () => {
           // Clicking the player's circle directly activates Move mode and highlights reachable squares in blue
           marble.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!isMyTurn) return;
+            if (!isMyTurn || playerProfile.burnedOut) return;
             setActionMode('MOVE');
             showMoveHighlights();
           });
         }
 
         cell.appendChild(marble);
+
+        // Check if this player is moving in this render frame
+        if (lastMoveAnimation && lastMoveAnimation.playerId === p.id && lastMoveAnimation.from) {
+          const fromPos = lastMoveAnimation.from;
+          const toPos = p.pos;
+          const boardRect = boardGrid.getBoundingClientRect();
+          const cellWidth = boardRect.width > 0 ? (boardRect.width / GRID_SIZE) : 48;
+          const cellHeight = boardRect.height > 0 ? (boardRect.height / GRID_SIZE) : 48;
+          const deltaX = (fromPos.c - toPos.c) * cellWidth;
+          const deltaY = (fromPos.r - toPos.r) * cellHeight;
+
+          if (lastMoveAnimation.isJump) {
+            marble.style.setProperty('--jump-dx', `${deltaX}px`);
+            marble.style.setProperty('--jump-dy', `${deltaY}px`);
+            marble.classList.add('marble-jumping');
+          } else {
+            marble.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
+            marble.style.transition = 'none';
+
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                marble.style.transition = 'transform 320ms cubic-bezier(0.22, 1, 0.36, 1)';
+                marble.style.transform = 'translate(0px, 0px)';
+              });
+            });
+          }
+
+          const animDuration = lastMoveAnimation.isJump ? 380 : 320;
+          setTimeout(() => {
+            if (cell.contains(marble)) {
+              marble.classList.add('marble-landing-bounce');
+              const ripple = document.createElement('div');
+              ripple.className = `move-landing-ripple ripple-${p.color}`;
+              cell.appendChild(ripple);
+              setTimeout(() => ripple.remove(), 500);
+              setTimeout(() => {
+                marble.classList.remove('marble-landing-bounce', 'marble-jumping');
+              }, 350);
+            }
+          }, animDuration);
+        }
       }
     });
 
+    // Reset move animation state once consumed for this frame
+    lastMoveAnimation = null;
+
     renderPlacedWallsUI();
     updateTurnHeaderUI();
+    renderGamePlayersList();
+    updateBurnOutButtonUI();
 
-    if (isMyTurn && currentActionMode === 'MOVE') {
+    if (isMyTurn && currentActionMode === 'MOVE' && !playerProfile.burnedOut) {
       showMoveHighlights();
     } else {
       clearMoveHighlights();
@@ -925,6 +1195,16 @@ document.addEventListener('DOMContentLoaded', () => {
         wallElem.classList.add(`wall-${w.color}`);
       }
 
+      const isNewWall = lastPlacedWall &&
+        w.r === lastPlacedWall.r &&
+        w.c === lastPlacedWall.c &&
+        w.orientation === lastPlacedWall.orientation;
+
+      if (isNewWall) {
+        wallElem.classList.add('wall-slam-in');
+        spawnWallImpactEffect(w, cellWidth, cellHeight);
+      }
+
       if (w.orientation === 'H') {
         wallElem.style.width = `${cellWidth * 2 - 4}px`;
         wallElem.style.height = `8px`;
@@ -939,13 +1219,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
       boardGrid.appendChild(wallElem);
     });
+
+    lastPlacedWall = null;
+  }
+
+  function spawnWallImpactEffect(wall, cellWidth, cellHeight) {
+    boardGrid.classList.remove('board-slam-shake');
+    void boardGrid.offsetWidth;
+    boardGrid.classList.add('board-slam-shake');
+    setTimeout(() => boardGrid.classList.remove('board-slam-shake'), 260);
+
+    const pulse = document.createElement('div');
+    pulse.className = `wall-impact-pulse pulse-${wall.color || 'blue'}`;
+
+    if (wall.orientation === 'H') {
+      pulse.style.width = `${cellWidth * 2 + 16}px`;
+      pulse.style.height = `22px`;
+      pulse.style.left = `${wall.c * cellWidth - 8}px`;
+      pulse.style.top = `${(wall.r + 1) * cellHeight - 11}px`;
+    } else {
+      pulse.style.width = `22px`;
+      pulse.style.height = `${cellHeight * 2 + 16}px`;
+      pulse.style.left = `${(wall.c + 1) * cellWidth - 11}px`;
+      pulse.style.top = `${wall.r * cellHeight - 8}px`;
+    }
+
+    boardGrid.appendChild(pulse);
+    setTimeout(() => pulse.remove(), 480);
   }
 
   function updateTurnHeaderUI() {
     const activePlayer = roomState.players[roomState.currentTurnIndex];
     if (!activePlayer) return;
 
-    turnLabel.textContent = `${activePlayer.name}'s Turn`;
+    if (activePlayer.burnedOut) {
+      const nextIdx = getNextActiveTurnIndex(roomState.currentTurnIndex);
+      advanceTurn(nextIdx);
+      return;
+    }
+
+    const isMe = (activePlayer.id === playerProfile.id);
+    turnLabel.textContent = isMe ? "Your Turn!" : `${activePlayer.name}'s Turn`;
     turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
   }
 
@@ -953,8 +1267,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Action Handlers
   // --------------------------------------------------------------------------
   function handleCellClick(r, c) {
+    if (playerProfile.burnedOut) return;
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id) {
+    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) {
       return;
     }
 
@@ -976,15 +1291,29 @@ document.addEventListener('DOMContentLoaded', () => {
       if (targetMove) {
         const destR = targetMove.r;
         const destC = targetMove.c;
+        const fromPos = activePlayer.pos ? { r: activePlayer.pos.r, c: activePlayer.pos.c } : null;
+        const isJump = (targetMove.type === 'JUMP') || (fromPos && (Math.abs(destR - fromPos.r) > 1 || Math.abs(destC - fromPos.c) > 1));
+
+        if (fromPos) {
+          lastMoveAnimation = {
+            playerId: activePlayer.id,
+            from: fromPos,
+            to: { r: destR, c: destC },
+            isJump: isJump,
+            color: activePlayer.color
+          };
+        }
 
         activePlayer.pos = { r: destR, c: destC };
         clearMoveHighlights();
 
-        const nextTurnIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
+        const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
 
         broadcastEvent('player_move', {
           playerId: playerProfile.id,
           pos: { r: destR, c: destC },
+          from: fromPos,
+          isJump: isJump,
           nextTurnIndex: nextTurnIndex
         });
 
@@ -1000,7 +1329,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dr = Math.abs(r - currPos.r);
         const dc = Math.abs(c - currPos.c);
         const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
-        const isOccupied = roomState.players.some(p => p.pos && p.pos.r === r && p.pos.c === c);
+        const isOccupied = roomState.players.some(p => p.pos && !p.burnedOut && p.pos.r === r && p.pos.c === c);
 
         if (isAdjacent && isOccupied) {
           showToast('Cannot jump over player: path is blocked!');
@@ -1011,6 +1340,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // MODE 2: Place Wall
     if (currentActionMode === 'WALL') {
+      if (Date.now() - lastWallPlacementTime < 350) return;
       const wallR = Math.min(r, GRID_SIZE - 2);
       const wallC = Math.min(c, GRID_SIZE - 2);
       const proposedWall = {
@@ -1020,15 +1350,17 @@ document.addEventListener('DOMContentLoaded', () => {
         color: activePlayer.color,
         playerId: activePlayer.id
       };
-      const playerPositions = roomState.players.map(p => ({ id: p.id, pos: p.pos }));
+      const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
 
       const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
 
       if (check.valid) {
+        lastWallPlacementTime = Date.now();
+        lastPlacedWall = proposedWall;
         roomState.walls.push(proposedWall);
-        document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+        clearWallDragGuide();
 
-        const nextIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
+        const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
 
         broadcastEvent('wall_placed', {
           wall: proposedWall,
@@ -1046,26 +1378,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function handleCellHover(r, c) {
-    if (currentActionMode !== 'WALL') return;
-    wallPlacementState.hoverR = r;
-    wallPlacementState.hoverC = c;
-    renderWallPreview(r, c);
+  // --------------------------------------------------------------------------
+  // Mobile Wall Drag-to-Place Guidance System
+  // --------------------------------------------------------------------------
+  function getNearestWallSeam(clientX, clientY, orientation) {
+    const rect = boardGrid.getBoundingClientRect();
+    const cellWidth = rect.width / GRID_SIZE;
+    const cellHeight = rect.height / GRID_SIZE;
+
+    // Upward offset on touch devices so the player's thumb does not obscure the seam
+    const isTouch = window.matchMedia('(pointer: coarse)').matches;
+    const offsetY = isTouch ? -16 : 0;
+
+    const x = clientX - rect.left;
+    const y = clientY - rect.top + offsetY;
+
+    let r = Math.round((y / cellHeight) - 1);
+    let c = Math.round((x / cellWidth) - 1);
+
+    r = Math.max(0, Math.min(GRID_SIZE - 2, r));
+    c = Math.max(0, Math.min(GRID_SIZE - 2, c));
+
+    return { r, c };
   }
 
-  window.addEventListener('keydown', (e) => {
-    if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
-      toggleWallOrientation();
-    }
-  });
-
-  function renderWallPreview(r, c) {
-    document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+  function renderWallDragGuide(clientX, clientY, r, c) {
     if (currentActionMode !== 'WALL') return;
-    if (r < 0 || c < 0) return;
-
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id) return;
+    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) return;
+
+    lastGuidePos = { clientX, clientY };
 
     const wallR = Math.min(r, GRID_SIZE - 2);
     const wallC = Math.min(c, GRID_SIZE - 2);
@@ -1081,17 +1423,27 @@ document.addEventListener('DOMContentLoaded', () => {
     const cellWidth = boardRect.width / GRID_SIZE;
     const cellHeight = boardRect.height / GRID_SIZE;
 
-    const previewElem = document.createElement('div');
-    previewElem.className = 'wall-preview';
+    const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
+    const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
+
+    // 1. Snapped Wall Preview on the Grid Seam
+    let previewElem = boardGrid.querySelector('.wall-preview');
+    if (!previewElem) {
+      previewElem = document.createElement('div');
+      previewElem.className = 'wall-preview wall-drag-preview';
+      boardGrid.appendChild(previewElem);
+    }
+    previewElem.classList.add('wall-drag-preview');
 
     if (activePlayer && activePlayer.hex) {
       previewElem.style.borderColor = activePlayer.hex;
       previewElem.style.backgroundColor = `${activePlayer.hex}55`;
     }
 
-    const check = isValidWallPlacement(proposedWall, roomState.walls, roomState.players.map(p => ({ id: p.id, pos: p.pos })));
     if (!check.valid) {
       previewElem.classList.add('wall-invalid');
+    } else {
+      previewElem.classList.remove('wall-invalid');
     }
 
     if (wallPlacementState.orientation === 'H') {
@@ -1106,8 +1458,216 @@ document.addEventListener('DOMContentLoaded', () => {
       previewElem.style.top = `${wallR * cellHeight + 2}px`;
     }
 
-    boardGrid.appendChild(previewElem);
+    // 2. Crosshair Laser Alignment Lines across the Board
+    if (!activeCrosshairs.h) {
+      activeCrosshairs.h = document.createElement('div');
+      activeCrosshairs.h.className = 'wall-crosshair wall-crosshair-h';
+      boardGrid.appendChild(activeCrosshairs.h);
+    }
+    if (!activeCrosshairs.v) {
+      activeCrosshairs.v = document.createElement('div');
+      activeCrosshairs.v.className = 'wall-crosshair wall-crosshair-v';
+      boardGrid.appendChild(activeCrosshairs.v);
+    }
+
+    activeCrosshairs.h.style.top = `${(wallR + 1) * cellHeight}px`;
+    activeCrosshairs.v.style.left = `${(wallC + 1) * cellWidth}px`;
+
+    if (!check.valid) {
+      activeCrosshairs.h.classList.add('invalid');
+      activeCrosshairs.v.classList.add('invalid');
+    } else {
+      activeCrosshairs.h.classList.remove('invalid');
+      activeCrosshairs.v.classList.remove('invalid');
+    }
+
+    // 3. Floating Mobile Guide HUD Pill above the touch point
+    if (!activeDragHud) {
+      activeDragHud = document.createElement('div');
+      activeDragHud.className = 'wall-drag-hud';
+      document.body.appendChild(activeDragHud);
+    }
+
+    activeDragHud.className = `wall-drag-hud ${check.valid ? 'hud-valid' : 'hud-invalid'}`;
+    const statusText = check.valid
+      ? `Wall (${wallPlacementState.orientation === 'H' ? 'Horiz' : 'Vert'}) • Release`
+      : (check.reason || 'Blocked');
+
+    activeDragHud.innerHTML = `
+      <div class="hud-status-icon">
+        ${check.valid 
+          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+          : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+        }
+      </div>
+      <span class="hud-text">${statusText}</span>
+      <button type="button" class="hud-rotate-btn" title="Rotate Wall">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        Flip
+      </button>
+    `;
+
+    const hudFlipBtn = activeDragHud.querySelector('.hud-rotate-btn');
+    if (hudFlipBtn) {
+      hudFlipBtn.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        toggleWallOrientation();
+      });
+    }
+
+    const hudX = Math.max(120, Math.min(window.innerWidth - 120, clientX));
+    const hudY = Math.max(40, clientY - 70);
+    activeDragHud.style.left = `${hudX}px`;
+    activeDragHud.style.top = `${hudY}px`;
+
+    // 4. Touch Beacon under finger on touch devices
+    if (window.matchMedia('(pointer: coarse)').matches) {
+      if (!activeTouchBeacon) {
+        activeTouchBeacon = document.createElement('div');
+        activeTouchBeacon.className = 'wall-touch-beacon';
+        document.body.appendChild(activeTouchBeacon);
+      }
+      activeTouchBeacon.style.left = `${clientX}px`;
+      activeTouchBeacon.style.top = `${clientY}px`;
+    }
   }
+
+  function clearWallDragGuide() {
+    document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+    if (activeCrosshairs.h) { activeCrosshairs.h.remove(); activeCrosshairs.h = null; }
+    if (activeCrosshairs.v) { activeCrosshairs.v.remove(); activeCrosshairs.v = null; }
+    if (activeDragHud) { activeDragHud.remove(); activeDragHud = null; }
+    if (activeTouchBeacon) { activeTouchBeacon.remove(); activeTouchBeacon = null; }
+    boardGrid.classList.remove('wall-drag-active');
+  }
+
+  function renderWallPreview(r, c) {
+    if (currentActionMode !== 'WALL') return;
+    const boardRect = boardGrid.getBoundingClientRect();
+    const cellWidth = boardRect.width / GRID_SIZE;
+    const cellHeight = boardRect.height / GRID_SIZE;
+    const clientX = boardRect.left + (c + 1) * cellWidth;
+    const clientY = boardRect.top + (r + 1) * cellHeight;
+    renderWallDragGuide(clientX, clientY, r, c);
+  }
+
+  function handleCellHover(r, c) {
+    if (currentActionMode !== 'WALL' || isDraggingWall) return;
+    wallPlacementState.hoverR = r;
+    wallPlacementState.hoverC = c;
+    renderWallPreview(r, c);
+  }
+
+  // Pointer & Touch Events for Drag-to-Place Wall
+  boardGrid.addEventListener('pointerdown', (e) => {
+    if (playerProfile.burnedOut) return;
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) return;
+
+    if (currentActionMode === 'WALL') {
+      isDraggingWall = true;
+      boardGrid.classList.add('wall-drag-active');
+
+      const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
+      wallPlacementState.hoverR = seam.r;
+      wallPlacementState.hoverC = seam.c;
+      renderWallDragGuide(e.clientX, e.clientY, seam.r, seam.c);
+
+      if (e.pointerType === 'touch') {
+        e.preventDefault();
+      }
+    }
+  });
+
+  window.addEventListener('pointermove', (e) => {
+    if (!isDraggingWall) return;
+    if (currentActionMode !== 'WALL') {
+      clearWallDragGuide();
+      isDraggingWall = false;
+      return;
+    }
+
+    const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
+    wallPlacementState.hoverR = seam.r;
+    wallPlacementState.hoverC = seam.c;
+    renderWallDragGuide(e.clientX, e.clientY, seam.r, seam.c);
+  });
+
+  window.addEventListener('pointerup', (e) => {
+    if (!isDraggingWall) return;
+    isDraggingWall = false;
+
+    const boardRect = boardGrid.getBoundingClientRect();
+    const isInsideBoard = (
+      e.clientX >= boardRect.left - 40 &&
+      e.clientX <= boardRect.right + 40 &&
+      e.clientY >= boardRect.top - 40 &&
+      e.clientY <= boardRect.bottom + 40
+    );
+
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    if (isInsideBoard && activePlayer && activePlayer.id === playerProfile.id && !activePlayer.burnedOut) {
+      const wallR = wallPlacementState.hoverR;
+      const wallC = wallPlacementState.hoverC;
+
+      if (wallR >= 0 && wallC >= 0) {
+        const proposedWall = {
+          r: wallR,
+          c: wallC,
+          orientation: wallPlacementState.orientation,
+          color: activePlayer.color,
+          playerId: activePlayer.id
+        };
+        const playerPositions = roomState.players.filter(p => !p.burnedOut).map(p => ({ id: p.id, pos: p.pos }));
+        const check = isValidWallPlacement(proposedWall, roomState.walls, playerPositions);
+
+        clearWallDragGuide();
+
+        if (check.valid) {
+          lastWallPlacementTime = Date.now();
+          lastPlacedWall = proposedWall;
+          roomState.walls.push(proposedWall);
+          const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+          broadcastEvent('wall_placed', {
+            wall: proposedWall,
+            nextTurnIndex: nextIndex
+          });
+          advanceTurn(nextIndex);
+          saveActiveSession();
+          renderBoardState();
+        } else {
+          boardGrid.classList.add('shake-anim');
+          showToast(check.reason || 'Invalid wall placement');
+          setTimeout(() => boardGrid.classList.remove('shake-anim'), 400);
+        }
+        return;
+      }
+    }
+
+    clearWallDragGuide();
+  });
+
+  window.addEventListener('pointercancel', () => {
+    if (isDraggingWall) {
+      isDraggingWall = false;
+      clearWallDragGuide();
+    }
+  });
+
+  // Touch two-finger tap to flip wall orientation quickly on mobile
+  boardGrid.addEventListener('touchstart', (e) => {
+    if (currentActionMode === 'WALL' && e.touches.length === 2) {
+      e.preventDefault();
+      toggleWallOrientation();
+    }
+  }, { passive: false });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
+      toggleWallOrientation();
+    }
+  });
 
   function advanceTurn(nextIndex) {
     roomState.currentTurnIndex = nextIndex;
@@ -1168,7 +1728,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMeHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
 
     if (isMyTurn || isMeHost) {
-      const nextTurnIndex = (roomState.currentTurnIndex + 1) % roomState.players.length;
+      const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
 
       broadcastEvent('turn_timeout', {
         playerId: activePlayer.id,
@@ -1185,6 +1745,21 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleRemoteMove(data) {
     const p = roomState.players.find(pl => pl.id === data.playerId);
     if (p) {
+      const oldPos = data.from || (p.pos ? { r: p.pos.r, c: p.pos.c } : null);
+      const isJump = (data.isJump !== undefined)
+        ? data.isJump
+        : (oldPos ? (Math.abs(data.pos.r - oldPos.r) > 1 || Math.abs(data.pos.c - oldPos.c) > 1) : false);
+
+      if (oldPos && (oldPos.r !== data.pos.r || oldPos.c !== data.pos.c)) {
+        lastMoveAnimation = {
+          playerId: p.id,
+          from: oldPos,
+          to: { r: data.pos.r, c: data.pos.c },
+          isJump: isJump,
+          color: p.color
+        };
+      }
+
       p.pos = data.pos;
       advanceTurn(data.nextTurnIndex);
       saveActiveSession();
@@ -1197,16 +1772,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleRemoteWall(data) {
+    lastPlacedWall = data.wall;
     roomState.walls.push(data.wall);
     advanceTurn(data.nextTurnIndex);
     saveActiveSession();
     renderBoardState();
   }
 
-  function triggerVictory(winner) {
+  function triggerVictory(winner, customSubtitle) {
     stopTurnTimer();
     winnerTitle.textContent = `${winner.name} Wins!`;
-    winnerSubtitle.textContent = `${winner.name} reached the golden center goal (5, 5)!`;
+    winnerSubtitle.textContent = customSubtitle || `${winner.name} reached the golden center goal (5, 5)!`;
 
     // Reset member ready flags for the next round
     roomState.players.forEach(p => {
@@ -1317,9 +1893,13 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
       p.isReady = false;
+      p.burnedOut = false;
+      p.isSpectating = false;
     });
 
     playerProfile.isReady = false;
+    playerProfile.burnedOut = false;
+    playerProfile.isSpectating = false;
     roomState.walls = [];
     roomState.currentTurnIndex = Math.floor(Math.random() * roomState.players.length);
     roomState.winner = null;
@@ -1334,6 +1914,268 @@ document.addEventListener('DOMContentLoaded', () => {
     renderBoardState();
     startTurnTimer();
   });
+
+  // --------------------------------------------------------------------------
+  // Left Sidebar: Connected Active Players List
+  // --------------------------------------------------------------------------
+  function renderGamePlayersList() {
+    if (!livePlayersList) return;
+    livePlayersList.innerHTML = '';
+
+    const activeCount = roomState.players.filter(p => !p.burnedOut).length;
+    if (livePlayerCount) {
+      livePlayerCount.textContent = `${activeCount}/${roomState.players.length}`;
+    }
+
+    roomState.players.forEach((p, idx) => {
+      const isCurrentTurn = (idx === roomState.currentTurnIndex && !p.burnedOut);
+      const isMe = (p.id === playerProfile.id);
+      const isBurned = !!p.burnedOut;
+
+      const card = document.createElement('div');
+      card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
+
+      let statusText = 'Waiting';
+      let statusClass = 'status-waiting';
+      if (isBurned) {
+        statusText = 'Burned Out';
+        statusClass = 'status-burned';
+      } else if (isCurrentTurn) {
+        statusText = isMe ? 'Your Turn!' : 'Taking Turn';
+        statusClass = 'status-turn';
+      }
+
+      card.innerHTML = `
+        <div class="live-player-avatar-wrap">
+          <div class="live-player-marble marble-${p.color} ${isBurned ? 'charred-marble' : ''}">
+            ${isBurned ? '<svg class="burned-status-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>' : ''}
+          </div>
+          ${isCurrentTurn ? '<div class="turn-beacon"></div>' : ''}
+        </div>
+        <div class="live-player-details">
+          <div class="live-player-name-row">
+            <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
+            ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+          </div>
+          <div class="live-player-sub-row">
+            <span class="live-player-status-badge ${statusClass}">${statusText}</span>
+            ${p.pos && !isBurned ? `<span class="live-player-coords">(${p.pos.r}, ${p.pos.c})</span>` : ''}
+          </div>
+        </div>
+      `;
+
+      livePlayersList.appendChild(card);
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Burn Out Button Engine & Confirmation Modal Handlers
+  // --------------------------------------------------------------------------
+  function updateBurnOutButtonUI() {
+    if (!btnBurnOut) return;
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    const amBurned = !!playerProfile.burnedOut || (meInRoom && meInRoom.burnedOut);
+    const activePlayer = roomState.players[roomState.currentTurnIndex];
+    const isMyTurn = (activePlayer && activePlayer.id === playerProfile.id && !amBurned);
+
+    if (amBurned) {
+      btnBurnOut.setAttribute('disabled', 'true');
+      btnBurnOut.classList.remove('my-turn');
+      if (btnBurnOutText) btnBurnOutText.textContent = 'SPECTATING (BURNED)';
+      return;
+    }
+
+    if (isMyTurn) {
+      btnBurnOut.removeAttribute('disabled');
+      btnBurnOut.classList.add('my-turn');
+      if (btnBurnOutText) btnBurnOutText.textContent = 'BURN OUT';
+    } else {
+      btnBurnOut.setAttribute('disabled', 'true');
+      btnBurnOut.classList.remove('my-turn');
+      if (btnBurnOutText) btnBurnOutText.textContent = 'BURN OUT';
+    }
+  }
+
+  if (btnBurnOut) {
+    btnBurnOut.addEventListener('click', () => {
+      const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+      const amBurned = !!playerProfile.burnedOut || (meInRoom && meInRoom.burnedOut);
+      const activePlayer = roomState.players[roomState.currentTurnIndex];
+      const isMyTurn = (activePlayer && activePlayer.id === playerProfile.id && !amBurned);
+
+      if (!isMyTurn) {
+        showToast('A burn out can only be pressed when it is your turn!');
+        return;
+      }
+
+      const burnSubtitle = document.getElementById('burn-modal-subtitle');
+      if (burnSubtitle) {
+        if (roomState.players.length === 2) {
+          burnSubtitle.textContent = 'You will surrender the match and your opponent will win.';
+        } else {
+          burnSubtitle.textContent = 'You will surrender from the match, your marble will incinerate, and you will spectate the rest of the game.';
+        }
+      }
+
+      if (modalBurnConfirm) {
+        modalBurnConfirm.classList.add('active');
+      }
+    });
+  }
+
+  if (btnCancelBurn) {
+    btnCancelBurn.addEventListener('click', () => {
+      if (modalBurnConfirm) modalBurnConfirm.classList.remove('active');
+    });
+  }
+
+  if (btnConfirmBurn) {
+    btnConfirmBurn.addEventListener('click', () => {
+      if (modalBurnConfirm) modalBurnConfirm.classList.remove('active');
+      executeLocalPlayerBurnOut();
+    });
+  }
+
+  function executeLocalPlayerBurnOut() {
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (!meInRoom || meInRoom.burnedOut) return;
+
+    const burnedPos = meInRoom.pos ? { r: meInRoom.pos.r, c: meInRoom.pos.c } : null;
+    const isTwoPlayerGame = (roomState.players.length === 2);
+
+    playerProfile.burnedOut = true;
+    meInRoom.burnedOut = true;
+
+    if (burnedPos) {
+      playPlayerBurnAnimation(burnedPos, playerProfile.id);
+    }
+
+    // Clear highlights & previews
+    clearMoveHighlights();
+    document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+
+    if (isTwoPlayerGame) {
+      // ON 2 PLAYERS: BURNING OUT SURRENDERS THE GAME, NOT SPECTATING!
+      playerProfile.isSpectating = false;
+      meInRoom.isSpectating = false;
+
+      const winner = roomState.players.find(p => p.id !== playerProfile.id);
+
+      broadcastEvent('player_burn_out', {
+        playerId: playerProfile.id,
+        burnedPos: burnedPos,
+        isSurrender: true,
+        winnerId: winner ? winner.id : null
+      });
+
+      showToast('You surrendered the match!', 'error');
+
+      // End game and show victory screen for opponent
+      setTimeout(() => {
+        if (winner) {
+          triggerVictory(winner, `${winner.name} Wins! ${playerProfile.name} surrendered.`);
+        }
+      }, 900);
+      return;
+    }
+
+    // 3+ players: spectating mode
+    playerProfile.isSpectating = true;
+    meInRoom.isSpectating = true;
+
+    const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+
+    broadcastEvent('player_burn_out', {
+      playerId: playerProfile.id,
+      burnedPos: burnedPos,
+      isSurrender: false,
+      nextTurnIndex: nextTurnIndex
+    });
+
+    showToast('You burned out and are now spectating.', 'error');
+
+    if (checkBurnOutWinCondition()) return;
+
+    advanceTurn(nextTurnIndex);
+    saveActiveSession();
+    renderBoardState();
+  }
+
+  function handleRemotePlayerBurnOut(data) {
+    const p = roomState.players.find(pl => pl.id === data.playerId);
+    if (!p) return;
+
+    p.burnedOut = true;
+
+    if (data.burnedPos) {
+      playPlayerBurnAnimation(data.burnedPos, data.playerId);
+    }
+
+    const isTwoPlayerGame = (data.isSurrender || roomState.players.length === 2);
+
+    if (isTwoPlayerGame) {
+      // 2 players: remote player surrendered the match, ending the game
+      p.isSpectating = false;
+      showToast(`${p.name} surrendered the game!`, 'success');
+
+      setTimeout(() => {
+        const winner = roomState.players.find(pl => pl.id !== data.playerId);
+        if (winner) {
+          triggerVictory(winner, `${winner.name} Wins! ${p.name} surrendered.`);
+        }
+      }, 900);
+      return;
+    }
+
+    // 3+ players: remote player spectates
+    p.isSpectating = true;
+    showToast(`${p.name} burned out and is now spectating!`, 'error');
+
+    if (checkBurnOutWinCondition()) return;
+
+    advanceTurn(data.nextTurnIndex);
+    saveActiveSession();
+    renderBoardState();
+  }
+
+  function playPlayerBurnAnimation(pos, playerId) {
+    if (!pos) return;
+    const cell = getCellElem(pos.r, pos.c);
+    if (!cell) return;
+
+    const marble = cell.querySelector('.marble-sphere');
+    if (marble) {
+      marble.classList.add('burning-marble');
+    }
+
+    const fireBurst = document.createElement('div');
+    fireBurst.className = 'player-burn-burst';
+    cell.appendChild(fireBurst);
+
+    boardGrid.classList.add('shake-anim');
+    setTimeout(() => boardGrid.classList.remove('shake-anim'), 400);
+
+    setTimeout(() => {
+      fireBurst.remove();
+      if (marble) marble.remove();
+      const p = roomState.players.find(pl => pl.id === playerId);
+      if (p) p.pos = null;
+      renderBoardState();
+    }, 1100);
+  }
+
+  function checkBurnOutWinCondition() {
+    if (!roomState.gameStarted) return false;
+    const activePlayers = roomState.players.filter(p => !p.burnedOut);
+    if (activePlayers.length === 1) {
+      const winner = activePlayers[0];
+      const surrendered = roomState.players.filter(p => p.burnedOut).map(p => p.name).join(', ');
+      triggerVictory(winner, `${winner.name} Wins! ${surrendered} surrendered.`);
+      return true;
+    }
+    return false;
+  }
 
   btnExitGame.addEventListener('click', () => {
     const isPlayerHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);

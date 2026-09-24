@@ -84,6 +84,19 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'turn_timeout' }, ({ payload }) => {
       if (callbacks.onTurnTimeout) callbacks.onTurnTimeout(payload);
     })
+    .on('broadcast', { event: 'player_burn_out' }, ({ payload }) => {
+      if (callbacks.onPlayerBurnOut) callbacks.onPlayerBurnOut(payload);
+    })
+    .on('broadcast', { event: 'room_reconnect_query' }, ({ payload }) => {
+      if (callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
+    })
+    .on('presence', { event: 'sync' }, () => {
+      if (callbacks.onPresenceSync && currentChannel) {
+        try {
+          callbacks.onPresenceSync(currentChannel.presenceState());
+        } catch (e) {}
+      }
+    })
     .on('presence', { event: 'leave' }, ({ key, leftPresences }) => {
       if (callbacks.onPresenceLeave) callbacks.onPresenceLeave(key, leftPresences);
     })
@@ -124,6 +137,8 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'player_left' && callbacks.onPlayerLeft) callbacks.onPlayerLeft(payload);
     if (type === 'game_terminated' && callbacks.onGameTerminated) callbacks.onGameTerminated(payload);
     if (type === 'turn_timeout' && callbacks.onTurnTimeout) callbacks.onTurnTimeout(payload);
+    if (type === 'player_burn_out' && callbacks.onPlayerBurnOut) callbacks.onPlayerBurnOut(payload);
+    if (type === 'room_reconnect_query' && callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
   };
 
   setTimeout(() => {

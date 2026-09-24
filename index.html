@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>WallRush</title>
-  <meta name="description" content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
-  
+  <meta name="description"
+    content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
+
   <!-- CSS Stylesheet -->
   <link rel="stylesheet" href="css/style.css">
-  
+
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <!-- Canvas Confetti CDN for Victory Celebration -->
   <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
+
 <body>
 
   <!-- UI Toast Notification Container -->
@@ -26,12 +29,14 @@
     <div class="glass-card">
       <h1 class="title-glow">WALLRUSH</h1>
       <p class="subtitle">Enter 6-digit access code to enter the arena</p>
-      
+
       <div class="input-group">
         <label for="invite-code">Invitation Code</label>
         <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="invite-code" class="input-field code-input" maxlength="6" placeholder="••••••" autocomplete="off" style="padding-right: 3.5rem;">
-          <button type="button" id="btn-toggle-invite-visibility" class="btn-icon" style="position: absolute; right: 8px; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer;">Show</button>
+          <input type="password" id="invite-code" class="input-field code-input" maxlength="6" placeholder="••••••"
+            autocomplete="off" style="padding-right: 3.5rem;">
+          <button type="button" id="btn-toggle-invite-visibility" class="btn-icon"
+            style="position: absolute; right: 8px; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer;">Show</button>
         </div>
       </div>
 
@@ -113,7 +118,8 @@
 
       <div class="lobby-code-box">
         <div>
-          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; text-transform: uppercase;">Room Code</span>
+          <span style="font-size: 0.75rem; color: var(--text-muted); display: block; text-transform: uppercase;">Room
+            Code</span>
           <span id="display-room-code" class="lobby-code-val">------</span>
         </div>
         <button id="btn-copy-link" class="btn-icon">Copy Invite Link</button>
@@ -168,17 +174,77 @@
         </div>
       </div>
 
-      <!-- Metallic Outer Frame & Glowing 11x11 Board Container -->
-      <div class="board-container">
-        <div id="board-grid" class="board-glowing-inner">
-          <!-- 11x11 = 121 cells populated dynamically by game.js -->
+      <!-- Main Game Arena with Left Players Sidebar and 11x11 Board Column -->
+      <div class="game-arena-wrapper">
+        <!-- Players Sidebar on the Left of 11x11 Box -->
+        <aside id="game-players-sidebar" class="game-players-sidebar">
+          <div class="sidebar-header">
+            <div class="sidebar-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="9" cy="7" r="4"></circle>
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+              </svg>
+              PLAYERS
+            </div>
+            <span id="live-player-count" class="live-player-badge">0</span>
+          </div>
+          <div id="live-players-list" class="live-players-container">
+            <!-- Dynamically populated based on how many players are in the game -->
+          </div>
+        </aside>
+
+        <!-- Center Game Board Column -->
+        <div class="game-board-column">
+          <!-- Metallic Outer Frame & Glowing 11x11 Board Container -->
+          <div class="board-container">
+            <div id="board-grid" class="board-glowing-inner">
+              <!-- 11x11 = 121 cells populated dynamically by game.js -->
+            </div>
+          </div>
+
+          <!-- Burn Out Button at the bottom of the 11x11 grid -->
+          <div class="burn-out-wrapper">
+            <button id="btn-burn-out" class="btn-burn-out" disabled title="Surrender your turn and spectate">
+              <div class="burn-sparks-layer">
+                <span class="flame-spark s1"></span>
+                <span class="flame-spark s2"></span>
+                <span class="flame-spark s3"></span>
+                <span class="flame-spark s4"></span>
+              </div>
+              <span id="btn-burn-out-text" class="burn-text">BURN OUT</span>
+            </button>
+          </div>
+
+          <!-- Controls Hint Banner -->
+          <div class="controls-hint">
+            <span class="hint-desktop"><span class="key-cap">Click Marble</span> Show Move Targets</span>
+            <span class="hint-desktop"><span class="key-cap">R</span> / <span class="key-cap">E</span> Rotate Wall</span>
+            <span class="hint-mobile"><span class="key-cap">Drag</span> Guide Wall Placement</span>
+            <span class="hint-mobile"><span class="key-cap">Tap</span> Move Piece</span>
+          </div>
         </div>
       </div>
+    </div>
+  </div>
 
-      <!-- Controls Hint Banner -->
-      <div class="controls-hint">
-        <span><span class="key-cap">Click Marble</span> Show Move Targets</span>
-        <span><span class="key-cap">R</span> / <span class="key-cap">E</span> Rotate Wall</span>
+  <!-- =========================================================================
+       BURN OUT CONFIRMATION MODAL
+       ========================================================================= -->
+  <div id="modal-burn-confirm" class="modal-overlay">
+    <div class="glass-card burn-modal-card">
+      <div class="burn-modal-icon-wrap">
+        <svg class="burn-modal-svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>
+        </svg>
+      </div>
+      <h2 class="title-glow burn-modal-title">Are you sure to burn out?</h2>
+      <p id="burn-modal-subtitle" class="subtitle" style="margin-bottom: 1.5rem; color: #cbd5e1;">You will surrender from the match, your marble will incinerate, and you will spectate the rest of the game.</p>
+      <div class="burn-modal-actions">
+        <button id="btn-cancel-burn" class="btn-secondary">Cancel</button>
+        <button id="btn-confirm-burn" class="btn-burn-confirm">Yes</button>
       </div>
     </div>
   </div>
@@ -194,7 +260,9 @@
 
       <!-- Post-Match Player Status Section -->
       <div class="input-group" style="margin-top: 1rem; margin-bottom: 1rem;">
-        <label id="victory-waiting-label" style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; text-align: center;">Waiting for player to ready...</label>
+        <label id="victory-waiting-label"
+          style="display: block; margin-bottom: 0.5rem; color: var(--text-muted); font-size: 0.85rem; text-align: center;">Waiting
+          for player to ready...</label>
         <div id="victory-players-list" class="players-list" style="max-height: 180px; margin-bottom: 0.5rem;">
           <!-- Populated dynamically via JS -->
         </div>
@@ -214,4 +282,5 @@
   <script src="js/pathfinding.js"></script>
   <script src="js/game.js"></script>
 </body>
+
 </html>
