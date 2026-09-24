@@ -886,7 +886,7 @@ document.addEventListener('DOMContentLoaded', () => {
         performSukunaCleaveSequence(payload.casterId, payload.targetId, payload);
       },
       onSukunaDomain: (payload) => {
-        performSukunaDomainSequence(payload.casterId, payload.targetId, payload);
+        performSukunaDomainSequence(payload.casterId, payload);
       },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
@@ -3031,7 +3031,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (techType === 'cleave') {
           executeCleaveAttack(opp.id);
         } else if (techType === 'domain') {
-          executeDomainAttack(opp.id);
+          executeDomainExpansionAttack();
         } else {
           executeDismantleAttack(opp.id);
         }
@@ -3382,57 +3382,278 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --------------------------------------------------------------------------
-  // DOMAIN EXPANSION: MALEVOLENT SHRINE
   // --------------------------------------------------------------------------
-  function executeDomainAttack(targetId) {
-    if (!isLeEmPlayer()) return;
-    const target = roomState.players.find(p => p.id === targetId);
-    if (!target || target.burnedOut) return;
+  // DOMAIN EXPANSION: MALEVOLENT SHRINE (Cinematic 17.8s anime cataclysm)
+  // --------------------------------------------------------------------------
+  let isDomainExpansionActive = false;
 
-    // Play domainexpansion.mp3 immediately at the exact instant the player is selected
+  function executeDomainExpansionAttack() {
+    if (!isLeEmPlayer() || isDomainExpansionActive) return;
+    isDomainExpansionActive = true;
+    setTimeout(() => { isDomainExpansionActive = false; }, 20000);
+
+    // Play domainexpansion.mp3 immediately at the exact instant the button was clicked
     playAudio('audio/domainexpansion.mp3', 1.0);
 
     const payload = {
       casterId: playerProfile.id,
-      targetId: targetId,
-      casterPos: playerProfile.pos ? { r: playerProfile.pos.r, c: playerProfile.pos.c } : null,
-      targetPos: target.pos ? { r: target.pos.r, c: target.pos.c } : null
+      casterPos: playerProfile.pos ? { r: playerProfile.pos.r, c: playerProfile.pos.c } : null
     };
 
     // Broadcast to all clients in the match
     broadcastEvent('sukuna_domain', payload);
 
     // Execute locally
-    performSukunaDomainSequence(playerProfile.id, targetId, payload);
+    performSukunaDomainSequence(playerProfile.id, payload);
   }
 
-  function performSukunaDomainSequence(casterId, targetId, payload = {}) {
+  function performSukunaDomainSequence(casterId, payload = {}) {
+    isDomainExpansionActive = true;
+    setTimeout(() => { isDomainExpansionActive = false; }, 20000);
+
+    // 1. Play audio domainexpansion.mp3 at the exact same instant (for remote peers)
+    if (casterId !== playerProfile.id) {
+      playAudio('audio/domainexpansion.mp3', 1.0);
+    }
+
     const caster = roomState.players.find(p => p.id === casterId);
-    const target = roomState.players.find(p => p.id === targetId);
-
     const cPos = (caster && caster.pos) || payload.casterPos || null;
-    const tPos = (target && target.pos) || payload.targetPos || null;
 
-    // Play domain audio
-    playAudio('audio/domainexpansion.mp3', 1.0);
-
-    // Chant speech bubble on caster circle: "Domain Expansion..." (stays 2 seconds then fades out)
-    if (cPos) {
-      const casterCell = getCellElem(cPos.r, cPos.c);
-      if (casterCell) {
-        showSukunaChantBubble(casterCell, 'Domain Expansion...');
+    // Get caster center coordinates in real-time
+    let casterCell = cPos ? getCellElem(cPos.r, cPos.c) : null;
+    let casterCenter = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    let originalMarble = null;
+    if (casterCell) {
+      originalMarble = casterCell.querySelector('.marble-sphere') || casterCell;
+      const rect = originalMarble.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        casterCenter = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
       }
     }
 
-    showToast('DOMAIN EXPANSION: MALEVOLENT SHRINE', 'error');
+    // Typewriter chant bubble on caster: "Domain Expansion..." (stays 2 seconds then fades out)
+    if (casterCell) {
+      showSukunaChantBubble(casterCell, 'Domain Expansion...');
+    }
 
-    // Trigger full board slashing barrage and domain aura
-    let targetCell = tPos ? getCellElem(tPos.r, tPos.c) : null;
-    triggerCleaveConsistentBarrageVFX(targetCell, 3000);
+    // ------------------------------------------------------------------------
+    // PHASE 1 (0.0s to 4.0s):
+    // The entire screen will slowly fade out for 4 seconds,
+    // Le Em and hand sign stay present above the fade out!
+    // ------------------------------------------------------------------------
+    const voidFadeout = document.createElement('div');
+    voidFadeout.className = 'domain-void-fadeout';
+    document.body.appendChild(voidFadeout);
+    requestAnimationFrame(() => voidFadeout.classList.add('active'));
+
+    // Caster spotlight: Le Em stays present and unaffected by the fade out
+    const casterSpotlight = document.createElement('div');
+    casterSpotlight.className = 'domain-caster-spotlight';
+    casterSpotlight.style.left = `${casterCenter.x}px`;
+    casterSpotlight.style.top = `${casterCenter.y}px`;
+
+    // Clone the caster marble so Le Em's circle player is 100% visible and present above the black fadeout
+    let clonedMarbleHTML = '';
+    if (originalMarble && originalMarble.classList.contains('marble-sphere')) {
+      clonedMarbleHTML = originalMarble.outerHTML;
+    } else {
+      clonedMarbleHTML = '<div class="marble-sphere marble-red player-sukuna-active domain-caster-marble-clone"></div>';
+    }
+
+    // Hand sign emblem placed at circle player (based on second image)
+    casterSpotlight.innerHTML = `
+      <div class="domain-caster-aura"></div>
+      <div class="domain-caster-player-circle">
+        ${clonedMarbleHTML}
+      </div>
+      <div class="domain-handsign-emblem">
+        <img src="img/sukuna_handsign.png" alt="Domain Hand Sign">
+      </div>
+    `;
+    document.body.appendChild(casterSpotlight);
+
+    // ------------------------------------------------------------------------
+    // PHASE 2 (4.0s to 7.3s):
+    // After 4s, the shrine behind Le Em will slowly rise for 3.3s
+    // and fade in back to normal with the house present
+    // ------------------------------------------------------------------------
+    let shrineContainer = null;
+    setTimeout(() => {
+      // Fade screen back to normal over 3.3s
+      voidFadeout.classList.remove('active');
+      voidFadeout.classList.add('fade-back');
+
+      // The shrine ("little house") behind player Le Em
+      shrineContainer = document.createElement('div');
+      shrineContainer.className = 'domain-shrine-container';
+      shrineContainer.style.left = `${casterCenter.x}px`;
+      shrineContainer.style.top = `${casterCenter.y}px`;
+      shrineContainer.innerHTML = `
+        <div class="domain-shrine-aura"></div>
+        <img src="img/malevolent_shrine.png" class="domain-shrine-img" alt="Malevolent Shrine">
+      `;
+      document.body.appendChild(shrineContainer);
+
+      requestAnimationFrame(() => {
+        shrineContainer.classList.add('shrine-risen');
+      });
+    }, 4000);
+
+    // ------------------------------------------------------------------------
+    // PHASE 3 (7.3s to 17.3s):
+    // White, red, black SLASH EVERYWHERE ON THE SCREEN FOR 10 SECONDS WITH GROUND SHAKING
+    // ------------------------------------------------------------------------
+    let slashOverlay = null;
+    let slashInterval = null;
+    setTimeout(() => {
+      if (voidFadeout.parentNode) voidFadeout.remove();
+
+      const gameScreen = document.querySelector('.game-screen') || document.body;
+      gameScreen.classList.add('domain-cataclysm-earthquake');
+      if (boardGrid) boardGrid.classList.add('domain-cataclysm-earthquake');
+
+      slashOverlay = document.createElement('div');
+      slashOverlay.className = 'domain-fullscreen-slashes';
+      document.body.appendChild(slashOverlay);
+
+      // Collect opponent cells for direct slashing strikes
+      const opponentCells = [];
+      roomState.players.forEach(p => {
+        if (p.id !== casterId && !p.burnedOut && p.pos) {
+          const c = getCellElem(p.pos.r, p.pos.c);
+          if (c) {
+            opponentCells.push({ cell: c, marble: c.querySelector('.marble-sphere') || c });
+          }
+        }
+      });
+
+      const omniAngles = [-60, 45, -30, 80, -75, 15, -85, 50, -40, 90, 0, 135, -120, 30, -55, 65, 20, -15, -45, 110];
+      let cutCount = 0;
+
+      slashInterval = setInterval(() => {
+        cutCount++;
+        const angle = omniAngles[cutCount % omniAngles.length];
+        const slashWidth = 340 + Math.random() * 320; // 340px to 660px length
+
+        let posX = Math.random() * window.innerWidth;
+        let posY = Math.random() * window.innerHeight;
+
+        // Every 3rd slash strikes directly across an opponent marble
+        if (cutCount % 3 === 0 && opponentCells.length > 0) {
+          const opp = opponentCells[cutCount % opponentCells.length];
+          const rect = opp.marble.getBoundingClientRect();
+          if (rect.width > 0) {
+            posX = rect.left + rect.width / 2;
+            posY = rect.top + rect.height / 2;
+            const wound = document.createElement('div');
+            wound.className = 'cleave-marble-wound';
+            wound.style.transform = `translateY(-50%) rotate(${angle}deg)`;
+            opp.marble.appendChild(wound);
+            setTimeout(() => wound.remove(), 600);
+          }
+        }
+
+        const slashEl = document.createElement('div');
+        slashEl.className = 'domain-omni-slash';
+        slashEl.style.left = `${posX}px`;
+        slashEl.style.top = `${posY}px`;
+        slashEl.style.width = `${slashWidth}px`;
+        slashEl.style.marginLeft = `${-slashWidth / 2}px`;
+        slashEl.style.transform = `rotate(${angle}deg)`;
+        slashEl.innerHTML = `
+          <div class="domain-omni-blade">
+            <div class="blade-aura-red"></div>
+            <div class="blade-core-black"></div>
+            <div class="blade-edge-white"></div>
+          </div>
+        `;
+        slashOverlay.appendChild(slashEl);
+
+        // Ambient flash pulse
+        if (cutCount % 8 === 0) {
+          const flash = document.createElement('div');
+          flash.className = 'domain-ambient-flash';
+          document.body.appendChild(flash);
+          setTimeout(() => flash.remove(), 280);
+        }
+
+        setTimeout(() => slashEl.remove(), 250);
+      }, 65);
+    }, 7300);
+
+    // ------------------------------------------------------------------------
+    // PHASE 4 (17.3s to 17.8s):
+    // AFTER THE SLASH, GIVE IT A REST FOR 0.5 SECONDS
+    // ------------------------------------------------------------------------
+    setTimeout(() => {
+      clearInterval(slashInterval);
+      if (slashOverlay) slashOverlay.remove();
+
+      const gameScreen = document.querySelector('.game-screen') || document.body;
+      gameScreen.classList.remove('domain-cataclysm-earthquake');
+      if (boardGrid) boardGrid.classList.remove('domain-cataclysm-earthquake');
+
+      // 0.5 seconds of stillness and silence
+    }, 17300);
+
+    // ------------------------------------------------------------------------
+    // PHASE 5 (17.8s):
+    // ALL OF THE PLAYERS WILL BURN OUT!
+    // ------------------------------------------------------------------------
+    setTimeout(() => {
+      if (casterSpotlight) casterSpotlight.remove();
+      if (shrineContainer) {
+        shrineContainer.style.transition = 'opacity 1.5s ease';
+        shrineContainer.style.opacity = '0';
+        setTimeout(() => shrineContainer.remove(), 1500);
+      }
+
+      executeDomainAllPlayersBurnOut(casterId);
+    }, 17800);
+  }
+
+  function executeDomainAllPlayersBurnOut(casterId) {
+    const isMeCaster = (playerProfile.id === casterId);
+    const opponents = roomState.players.filter(p => p.id !== casterId);
+
+    // Burn out all opponents
+    opponents.forEach(p => {
+      p.burnedOut = true;
+      if (p.id === playerProfile.id) {
+        playerProfile.burnedOut = true;
+        clearMoveHighlights();
+        document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+        updateBurnOutButtonUI();
+      }
+      if (p.pos) {
+        playPlayerBurnAnimation(p.pos, p.id);
+      }
+    });
+
+    const caster = roomState.players.find(p => p.id === casterId);
+    const casterName = caster ? caster.name : 'Le Em';
+
+    showToast('Domain Expansion: Malevolent Shrine consumed all opponents!', 'error');
+
+    // Authoritative broadcast from caster to sync all peers and end game
+    if (isMeCaster) {
+      opponents.forEach(p => {
+        broadcastEvent('player_burn_out', {
+          playerId: p.id,
+          burnedPos: p.pos ? { r: p.pos.r, c: p.pos.c } : null,
+          isSurrender: true,
+          winnerId: casterId
+        });
+      });
+      saveActiveSession();
+      broadcastEvent('room_sync', roomState);
+    }
 
     setTimeout(() => {
-      executeTargetDismantledBurnOut(targetId, casterId, tPos, 'Domain Expansion');
-    }, 3500);
+      if (caster) {
+        triggerVictory(caster, `${casterName} Wins! Malevolent Shrine consumed the entire domain.`);
+      }
+    }, 1000);
   }
 
   // --------------------------------------------------------------------------
@@ -3533,7 +3754,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnSukunaDomain) {
     btnSukunaDomain.addEventListener('click', () => {
       if (!isLeEmPlayer() || !isSukunaModeActive) return;
-      openTechniqueTargetModal('domain');
+      executeDomainExpansionAttack();
     });
   }
 
