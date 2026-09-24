@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Global App State & Color Palette
   // --------------------------------------------------------------------------
   const DEFAULT_INVITATION_CODE = "784921";
-  
+
   const COLOR_PALETTE = [
     { color: 'green', hex: '#2ecc71' },
     { color: 'blue', hex: '#3498db' },
@@ -81,7 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnModeFfa = document.getElementById('btn-mode-ffa');
   const btnModeTeam = document.getElementById('btn-mode-team');
   const lobbyModeHelperNote = document.getElementById('lobby-mode-helper-note');
-  
+
   const displayRoomCode = document.getElementById('display-room-code');
   const lobbyModeBadge = document.getElementById('lobby-mode-badge');
   const lobbyGridBadge = document.getElementById('lobby-grid-badge');
@@ -91,7 +91,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const lobbyColorPicker = document.getElementById('lobby-color-picker');
   const btnStartGame = document.getElementById('btn-start-game');
   const btnReadyToggle = document.getElementById('btn-ready-toggle');
-  
+
   const boardGrid = document.getElementById('board-grid');
   const turnLabel = document.getElementById('turn-label');
   const turnDot = document.getElementById('current-turn-dot');
@@ -191,7 +191,7 @@ document.addEventListener('DOMContentLoaded', () => {
           gameStarted: true,
           timestamp: Date.now()
         }));
-      } catch (e) {}
+      } catch (e) { }
     } else {
       clearActiveSession();
     }
@@ -200,7 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function clearActiveSession() {
     try {
       localStorage.removeItem('wallrush_active_session');
-    } catch (e) {}
+    } catch (e) { }
   }
 
   // Check URL parameters for direct join link e.g. ?join=X7K2P9
@@ -232,6 +232,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function attemptReconnection(session) {
     isReconnectingActive = true;
     playerProfile = session.playerProfile || playerProfile;
+    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em' && playerProfile.isDev) {
+      isDevVerified = true;
+    }
     isHost = !!session.isHost;
     roomState.code = session.roomCode;
     roomState.gameStarted = true;
@@ -274,19 +277,43 @@ document.addEventListener('DOMContentLoaded', () => {
   // --------------------------------------------------------------------------
   function isDeveloper(pOrName) {
     if (!pOrName) return false;
+
+    // 1. If passed a player object
     if (typeof pOrName === 'object') {
       if (pOrName.isDev) return true;
-      if (pOrName.id === playerProfile.id) return isDevVerified;
+      if (pOrName.id === playerProfile.id && isDevVerified) return true;
       if (pOrName.name && pOrName.name.trim().toLowerCase() === 'le em') {
+        if (pOrName.id === playerProfile.id) return isDevVerified;
+        if (roomState && Array.isArray(roomState.players)) {
+          const match = roomState.players.find(pl => pl.id === pOrName.id);
+          if (match && match.isDev) return true;
+        }
         return !!pOrName.isDev;
       }
       return false;
     }
-    const isMatch = typeof pOrName === 'string' && pOrName.trim().toLowerCase() === 'le em';
-    if (!isMatch) return false;
-    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em') {
-      return isDevVerified;
+
+    // 2. If passed a name string (e.g. 'Le Em' or p.name)
+    if (typeof pOrName === 'string') {
+      const isMatch = pOrName.trim().toLowerCase() === 'le em';
+      if (!isMatch) return false;
+
+      // Check if local player is verified Le Em
+      if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em' && isDevVerified) {
+        return true;
+      }
+
+      // Check if any player in the current room is verified Le Em
+      if (roomState && Array.isArray(roomState.players)) {
+        const devInRoom = roomState.players.find(p =>
+          p.name && p.name.trim().toLowerCase() === 'le em' && (p.isDev || (p.id === playerProfile.id && isDevVerified))
+        );
+        if (devInRoom) return true;
+      }
+
+      return false;
     }
+
     return false;
   }
 
@@ -546,7 +573,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function enterLobbyRoom(isReconnecting = false) {
     displayRoomCode.textContent = roomState.code;
     maxPlayersLabel.textContent = roomState.maxPlayers;
-    
+
     // Only display waiting room screen if NOT a reconnection attempt (avoid showing empty 0/4 lobby!)
     if (!roomState.gameStarted && !isReconnecting) {
       showScreen(screens.lobbyRoom);
@@ -612,6 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
               existing.burnedOut = true;
               existing.isSpectating = true;
               existing.pos = null;
+              if (reconnectingPlayer.isDev !== undefined) existing.isDev = reconnectingPlayer.isDev;
             } else {
               roomState.players.push({
                 ...reconnectingPlayer,
@@ -626,6 +654,7 @@ document.addEventListener('DOMContentLoaded', () => {
           } else {
             if (existing) {
               existing.name = reconnectingPlayer.name || existing.name;
+              if (reconnectingPlayer.isDev !== undefined) existing.isDev = reconnectingPlayer.isDev;
             } else if (roomState.players.length < roomState.maxPlayers) {
               roomState.players.push(reconnectingPlayer);
             }
@@ -689,7 +718,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // If it was supposed to be this player's turn, advance turn so match continues
             if (syncedRoomState.currentTurnIndex < syncedRoomState.players.length &&
-                syncedRoomState.players[syncedRoomState.currentTurnIndex].id === playerProfile.id) {
+              syncedRoomState.players[syncedRoomState.currentTurnIndex].id === playerProfile.id) {
               syncedRoomState.currentTurnIndex = getNextActiveTurnIndex(syncedRoomState.currentTurnIndex);
             }
 
@@ -702,7 +731,7 @@ document.addEventListener('DOMContentLoaded', () => {
         roomState = syncedRoomState;
         const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
         setGridDimensions(gSize);
-        
+
         // Update local playerProfile if host assigned a new unique color or ready status
         const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
         if (meInRoom) {
@@ -711,6 +740,7 @@ document.addEventListener('DOMContentLoaded', () => {
           playerProfile.isReady = !!meInRoom.isReady;
           playerProfile.burnedOut = !!meInRoom.burnedOut;
           playerProfile.isSpectating = !!meInRoom.isSpectating;
+          if (meInRoom.isDev !== undefined) playerProfile.isDev = !!meInRoom.isDev;
         }
 
         saveActiveSession();
@@ -961,7 +991,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (p) {
         const isPlayerHost = (p.id === roomState.hostId || i === 0);
         const isMe = (p.id === playerProfile.id);
-        const devBadgeHTML = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+        const devBadgeHTML = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
 
         let badgeHTML = '';
         if (isPlayerHost) {
@@ -1006,7 +1036,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnStartGame.style.display = 'none';
       if (btnReadyToggle) {
         btnReadyToggle.style.display = 'flex';
-        
+
         const mySlot = roomState.players.find(p => p.id === playerProfile.id);
         const amReady = mySlot ? mySlot.isReady : playerProfile.isReady;
 
@@ -1144,7 +1174,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (btnModeWall) btnModeWall.classList.remove('active');
       if (btnRotateWall) btnRotateWall.style.display = 'none';
       clearWallDragGuide();
-      
+
       const isMyTurn = (roomState.players[roomState.currentTurnIndex]?.id === playerProfile.id && !playerProfile.burnedOut);
       if (isMyTurn) {
         showMoveHighlights();
@@ -1390,7 +1420,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cell) {
         const marble = document.createElement('div');
         marble.className = `marble-sphere marble-${p.color}`;
-        
+
         const isMe = (p.id === playerProfile.id);
         if (isMe) {
           if (isMyTurn) {
@@ -1543,11 +1573,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const isMe = (activePlayer.id === playerProfile.id);
-    const devBadge = isDeveloper(activePlayer.name) ? '<span class="dev-badge">Dev</span>' : '';
+    const devBadge = isDeveloper(activePlayer) ? '<span class="dev-badge">Dev</span>' : '';
     const teamTag = (roomState.gameMode === 'team' && activePlayer.teamName) ? ` <span style="opacity:0.85; font-size:0.85em;">(${escapeHTML(activePlayer.teamName)})</span>` : '';
 
     if (isMe) {
-      turnLabel.innerHTML = `Your Turn!${teamTag}`;
+      turnLabel.innerHTML = `Your Turn!${devBadge}${teamTag}`;
     } else {
       turnLabel.innerHTML = `${escapeHTML(activePlayer.name)}${devBadge}'s Turn${teamTag}`;
     }
@@ -1789,10 +1819,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeDragHud.innerHTML = `
       <div class="hud-status-icon">
-        ${check.valid 
-          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-          : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
-        }
+        ${check.valid
+        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+      }
       </div>
       <span class="hud-text">${statusText}</span>
       <button type="button" class="hud-rotate-btn" title="Rotate Wall">
@@ -2076,11 +2106,12 @@ document.addEventListener('DOMContentLoaded', () => {
   function triggerVictory(winner, customSubtitle) {
     stopTurnTimer();
     const isTeam = (roomState.gameMode === 'team' && winner.teamName);
-    winnerTitle.textContent = isTeam ? `${winner.teamName} Wins!` : `${winner.name} Wins!`;
+    const devBadge = isDeveloper(winner) ? '<span class="dev-badge">Dev</span>' : '';
+    winnerTitle.innerHTML = isTeam ? `${escapeHTML(winner.teamName)} Wins!` : `${escapeHTML(winner.name)}${devBadge} Wins!`;
     const defaultSubtitle = isTeam
-      ? `${winner.name} led ${winner.teamName} to the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`
-      : `${winner.name} reached the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`;
-    winnerSubtitle.textContent = customSubtitle || defaultSubtitle;
+      ? `${escapeHTML(winner.name)}${devBadge} led ${escapeHTML(winner.teamName)} to the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`
+      : `${escapeHTML(winner.name)}${devBadge} reached the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`;
+    winnerSubtitle.innerHTML = customSubtitle || defaultSubtitle;
 
     // Reset member ready flags and burnout statuses when game ends
     roomState.players.forEach(p => {
@@ -2117,7 +2148,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const isHostSlot = (p.id === roomState.hostId || idx === 0);
       const isMe = (p.id === playerProfile.id);
-      const devBadgeHTML = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+      const devBadgeHTML = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
       const teamTag = (roomState.gameMode === 'team' && p.teamName) ? ` <span style="opacity:0.75; font-size:0.8em; color:var(--text-muted);">(${escapeHTML(p.teamName)})</span>` : '';
 
       let badgeHTML = '';
@@ -2242,7 +2273,7 @@ document.addEventListener('DOMContentLoaded', () => {
     roomState.winner = null;
 
     if (supabaseClient && roomState.code) {
-      supabaseClient.from('matches').delete().eq('room_code', roomState.code).then(() => {}).catch(() => {});
+      supabaseClient.from('matches').delete().eq('room_code', roomState.code).then(() => { }).catch(() => { });
     }
 
     broadcastEvent('play_again', roomState);
@@ -2310,7 +2341,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const isCurrentTurn = (p.id === currentActivePlayer?.id && !p.burnedOut);
           const isMe = (p.id === playerProfile.id);
           const isBurned = !!p.burnedOut;
-          const devBadge = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+          const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
 
           const card = document.createElement('div');
           card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -2354,7 +2385,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isCurrentTurn = (idx === roomState.currentTurnIndex && !p.burnedOut);
         const isMe = (p.id === playerProfile.id);
         const isBurned = !!p.burnedOut;
-        const devBadge = isDeveloper(p.name) ? '<span class="dev-badge">Dev</span>' : '';
+        const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
 
         const card = document.createElement('div');
         card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -2637,7 +2668,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function escapeHTML(str) {
-    return str.replace(/[&<>'"]/g, 
+    return str.replace(/[&<>'"]/g,
       tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
     );
   }
