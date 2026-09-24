@@ -880,7 +880,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       onSukunaDismantle: (payload) => {
-        performSukunaDismantleSequence(payload.casterId, payload.targetId);
+        performSukunaDismantleSequence(payload.casterId, payload.targetId, payload);
+      },
+      onSukunaCleave: (payload) => {
+        performSukunaCleaveSequence(payload.casterId, payload.targetId, payload);
+      },
+      onSukunaDomain: (payload) => {
+        performSukunaDomainSequence(payload.casterId, payload.targetId, payload);
       },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
@@ -1993,7 +1999,7 @@ document.addEventListener('DOMContentLoaded', () => {
         boardGrid.classList.add('wall-drag-active');
         try {
           boardGrid.setPointerCapture(e.pointerId);
-        } catch (err) {}
+        } catch (err) { }
 
         const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
         wallPlacementState.hoverR = seam.r;
@@ -2027,7 +2033,7 @@ document.addEventListener('DOMContentLoaded', () => {
     boardGrid.classList.remove('wall-drag-active');
     try {
       boardGrid.releasePointerCapture(e.pointerId);
-    } catch (err) {}
+    } catch (err) { }
 
     if (activeTouchBeacon) {
       activeTouchBeacon.remove();
@@ -2043,7 +2049,7 @@ document.addEventListener('DOMContentLoaded', () => {
       boardGrid.classList.remove('wall-drag-active');
       try {
         boardGrid.releasePointerCapture(e.pointerId);
-      } catch (err) {}
+      } catch (err) { }
       if (activeTouchBeacon) {
         activeTouchBeacon.remove();
         activeTouchBeacon = null;
@@ -2971,32 +2977,64 @@ document.addEventListener('DOMContentLoaded', () => {
   // --------------------------------------------------------------------------
   // Sukuna Arsenal & Dismantle Technique Handlers
   // --------------------------------------------------------------------------
-  function openDismantleTargetModal() {
+  function openTechniqueTargetModal(techType = 'dismantle') {
     if (!modalDismantleTarget || !dismantleTargetsList) return;
     dismantleTargetsList.innerHTML = '';
+
+    const modalTitle = document.getElementById('sukuna-modal-title');
+    const modalDesc = document.getElementById('sukuna-modal-desc');
+    const modalTag = document.getElementById('sukuna-modal-tag');
+
+    if (techType === 'cleave') {
+      if (modalTag) modalTag.textContent = 'INNATE TECHNIQUE';
+      if (modalTitle) modalTitle.innerHTML = 'CLEAVE <span>「 捌 」</span>';
+      if (modalDesc) modalDesc.textContent = 'Select an opponent to unleash a relentless 3-second slashing barrage.';
+    } else if (techType === 'domain') {
+      if (modalTag) modalTag.textContent = 'BARRIER TECHNIQUE';
+      if (modalTitle) modalTitle.innerHTML = 'DOMAIN EXPANSION <span>「 伏魔御廚子 」</span>';
+      if (modalDesc) modalDesc.textContent = 'Select an opponent to entrap within Malevolent Shrine.';
+    } else {
+      if (modalTag) modalTag.textContent = 'JUJUTSU TECHNIQUE';
+      if (modalTitle) modalTitle.innerHTML = 'DISMANTLE <span>「 解 」</span>';
+      if (modalDesc) modalDesc.textContent = 'Select an opponent to slice through with an invisible slash.';
+    }
 
     const activeOpponents = roomState.players.filter(p => p.id !== playerProfile.id && !p.burnedOut && p.pos);
 
     if (activeOpponents.length === 0) {
-      showToast('No active opponents available to dismantle!', 'error');
+      showToast('No active opponents available to target!', 'error');
       return;
     }
 
     activeOpponents.forEach(opp => {
       const btn = document.createElement('button');
       btn.className = 'dismantle-target-btn';
+
+      let strikeTagHTML = '<div class="dismantle-strike-tag">DISMANTLE ⚔️</div>';
+      if (techType === 'cleave') {
+        strikeTagHTML = '<div class="cleave-strike-tag">CLEAVE 🩸</div>';
+      } else if (techType === 'domain') {
+        strikeTagHTML = '<div class="domain-strike-tag">EXPAND DOMAIN ⛩️</div>';
+      }
+
       btn.innerHTML = `
         <div class="dismantle-target-info">
           <div class="dismantle-target-marble marble-${opp.color}"></div>
           <span class="dismantle-target-name">${escapeHTML(opp.name)}</span>
           <span class="dismantle-target-coords">(${opp.pos.r}, ${opp.pos.c})</span>
         </div>
-        <div class="dismantle-strike-tag">DISMANTLE ⚔️</div>
+        ${strikeTagHTML}
       `;
 
       btn.addEventListener('click', () => {
         modalDismantleTarget.classList.remove('active');
-        executeDismantleAttack(opp.id);
+        if (techType === 'cleave') {
+          executeCleaveAttack(opp.id);
+        } else if (techType === 'domain') {
+          executeDomainAttack(opp.id);
+        } else {
+          executeDismantleAttack(opp.id);
+        }
       });
 
       dismantleTargetsList.appendChild(btn);
@@ -3005,66 +3043,35 @@ document.addEventListener('DOMContentLoaded', () => {
     modalDismantleTarget.classList.add('active');
   }
 
-  function executeDismantleAttack(targetId) {
-    if (!isLeEmPlayer()) return;
-    const target = roomState.players.find(p => p.id === targetId);
-    if (!target || target.burnedOut) return;
-
-    // Broadcast to all clients in the match
-    broadcastEvent('sukuna_dismantle', {
-      casterId: playerProfile.id,
-      targetId: targetId
-    });
-
-    // Execute locally
-    performSukunaDismantleSequence(playerProfile.id, targetId);
-  }
-
-  function performSukunaDismantleSequence(casterId, targetId) {
-    const caster = roomState.players.find(p => p.id === casterId);
-    const target = roomState.players.find(p => p.id === targetId);
-    if (!target) return;
-
-    // 1. Play dismantle.mp3 immediately at the exact instant the button was clicked
-    playAudio('audio/dismantle.mp3', 1.0);
-
-    // 2. Chant speech bubble on caster circle: "Dismantle..." typed fast
-    if (caster && caster.pos) {
-      const casterCell = getCellElem(caster.pos.r, caster.pos.c);
-      if (casterCell) {
-        showSukunaChantBubble(casterCell, 'Dismantle...');
-      }
-    }
-
-    // 3. Animated white & black visible slash (black dominant) cutting through target circle in grid
-    setTimeout(() => {
-      if (target.pos) {
-        const targetCell = getCellElem(target.pos.r, target.pos.c);
-        if (targetCell) {
-          triggerDismantleSlashVFX(targetCell);
-        }
-      }
-    }, 320);
-
-    // 4. After all of that animation slash (slash runs ~450ms, ends at ~770ms),
-    // give it 0.5 seconds rest (500ms delay: 770ms + 500ms = ~1270ms),
-    // THEN the targeted player BURNS OUT!
-    setTimeout(() => {
-      executeTargetDismantledBurnOut(targetId);
-    }, 1270);
+  function openDismantleTargetModal() {
+    openTechniqueTargetModal('dismantle');
   }
 
   function showSukunaChantBubble(cell, text) {
-    const existing = cell.querySelector('.sukuna-chant-bubble');
-    if (existing) existing.remove();
+    const existing = document.querySelectorAll('.sukuna-chant-bubble');
+    existing.forEach(el => el.remove());
+
+    let centerX = window.innerWidth / 2;
+    let targetTop = 130;
+
+    if (cell) {
+      const marble = cell.querySelector('.marble-sphere') || cell;
+      const rect = marble.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        centerX = rect.left + rect.width / 2;
+        targetTop = rect.top - 14;
+      }
+    }
 
     const bubble = document.createElement('div');
     bubble.className = 'sukuna-chant-bubble';
+    bubble.style.left = `${centerX}px`;
+    bubble.style.top = `${targetTop}px`;
     bubble.innerHTML = `
       <span class="sukuna-chant-text"></span>
       <span class="sukuna-chant-caret"></span>
     `;
-    cell.appendChild(bubble);
+    document.body.appendChild(bubble);
 
     const textEl = bubble.querySelector('.sukuna-chant-text');
     let idx = 0;
@@ -3073,35 +3080,102 @@ document.addEventListener('DOMContentLoaded', () => {
       textEl.textContent = text.slice(0, idx);
       if (idx >= text.length) {
         clearInterval(interval);
+        // Stay for exactly 2 seconds, then smoothly fade out
         setTimeout(() => {
-          bubble.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          bubble.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
           bubble.style.opacity = '0';
-          bubble.style.transform = 'translateX(-50%) translateY(-10px)';
-          setTimeout(() => bubble.remove(), 400);
-        }, 1300);
+          bubble.style.transform = 'translate(-50%, -125%)';
+          setTimeout(() => bubble.remove(), 520);
+        }, 2000);
       }
     }, 25);
   }
 
-  function triggerDismantleSlashVFX(targetCell) {
-    const marble = targetCell.querySelector('.marble-sphere') || targetCell;
-    const rect = marble.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
+  // --------------------------------------------------------------------------
+  // DISMANTLE TECHNIQUE
+  // --------------------------------------------------------------------------
+  function executeDismantleAttack(targetId) {
+    if (!isLeEmPlayer()) return;
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target || target.burnedOut) return;
 
-    // 1. Visually bisect and rupture the marble inside the grid cell
-    if (marble && marble.classList.contains('marble-sphere')) {
-      marble.classList.add('dismantle-bisected');
-      const scar = document.createElement('div');
-      scar.className = 'dismantle-cut-scar';
-      marble.appendChild(scar);
-      setTimeout(() => {
-        scar.remove();
-        marble.classList.remove('dismantle-bisected');
-      }, 1250);
+    // Play dismantle.mp3 immediately at the exact instant the player is selected
+    playAudio('audio/dismantle.mp3', 1.0);
+
+    const payload = {
+      casterId: playerProfile.id,
+      targetId: targetId,
+      casterPos: playerProfile.pos ? { r: playerProfile.pos.r, c: playerProfile.pos.c } : null,
+      targetPos: target.pos ? { r: target.pos.r, c: target.pos.c } : null
+    };
+
+    // Broadcast to all clients in the match
+    broadcastEvent('sukuna_dismantle', payload);
+
+    // Execute locally
+    performSukunaDismantleSequence(playerProfile.id, targetId, payload);
+  }
+
+  function performSukunaDismantleSequence(casterId, targetId, payload = {}) {
+    const caster = roomState.players.find(p => p.id === casterId);
+    const target = roomState.players.find(p => p.id === targetId);
+
+    const cPos = (caster && caster.pos) || payload.casterPos || null;
+    const tPos = (target && target.pos) || payload.targetPos || null;
+
+    // Play audio
+    playAudio('audio/dismantle.mp3', 1.0);
+
+    // Chant speech bubble on caster circle: "Dismantle..." (stays 2 seconds then fades out)
+    if (cPos) {
+      const casterCell = getCellElem(cPos.r, cPos.c);
+      if (casterCell) {
+        showSukunaChantBubble(casterCell, 'Dismantle...');
+      }
     }
 
-    // 2. Spawn the cinematic slashing blades centered at (centerX, centerY)
+    // Animated white & black visible slash cutting through target circle in grid
+    setTimeout(() => {
+      let targetCell = tPos ? getCellElem(tPos.r, tPos.c) : null;
+      triggerDismantleSlashVFX(targetCell);
+    }, 320);
+
+    // After slash animation + 0.5s rest (~1270ms), target burns out
+    setTimeout(() => {
+      executeTargetDismantledBurnOut(targetId, casterId, tPos, 'Dismantle');
+    }, 1270);
+  }
+
+  function triggerDismantleSlashVFX(targetCell) {
+    let centerX = window.innerWidth / 2;
+    let centerY = window.innerHeight / 2;
+
+    if (targetCell) {
+      const marble = targetCell.querySelector('.marble-sphere') || targetCell;
+      const rect = marble.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        centerX = rect.left + rect.width / 2;
+        centerY = rect.top + rect.height / 2;
+      } else {
+        const cellRect = targetCell.getBoundingClientRect();
+        if (cellRect.width > 0 && cellRect.height > 0) {
+          centerX = cellRect.left + cellRect.width / 2;
+          centerY = cellRect.top + cellRect.height / 2;
+        }
+      }
+
+      if (marble && marble.classList.contains('marble-sphere')) {
+        marble.classList.add('dismantle-bisected');
+        const scar = document.createElement('div');
+        scar.className = 'dismantle-cut-scar';
+        marble.appendChild(scar);
+        setTimeout(() => {
+          scar.remove();
+          marble.classList.remove('dismantle-bisected');
+        }, 1250);
+      }
+    }
+
     const existing = document.querySelector('.dismantle-cinema-overlay');
     if (existing) existing.remove();
 
@@ -3112,37 +3186,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     slashOverlay.innerHTML = `
       <div class="dismantle-impact-flash"></div>
-      
-      <!-- SLASH 1: Downward Diagonal Cut (Top-Left to Bottom-Right) -->
       <div class="dismantle-blade-streak blade-1">
         <div class="blade-core-black"></div>
         <div class="blade-edge-white"></div>
       </div>
-
-      <!-- SLASH 2: Upward Diagonal Counter-Cut (Bottom-Left to Top-Right) -->
       <div class="dismantle-blade-streak blade-2">
         <div class="blade-core-black"></div>
         <div class="blade-edge-white"></div>
       </div>
-
-      <!-- SLASH 3: Horizontal Cleave Cut across center -->
       <div class="dismantle-blade-streak blade-3">
         <div class="blade-core-black"></div>
         <div class="blade-edge-white"></div>
       </div>
-
-      <!-- Spatial Ink Rift Cuts (Heavy Dominant Black geometric slashes) -->
       <div class="dismantle-ink-rift rift-1"></div>
       <div class="dismantle-ink-rift rift-2"></div>
       <div class="dismantle-ink-rift rift-3"></div>
-
-      <!-- Center Cutting Spark Burst -->
       <div class="slash-impact-flash"></div>
     `;
 
     document.body.appendChild(slashOverlay);
 
-    // Violent screen and board shake
     const gameScreen = document.querySelector('.game-screen') || document.body;
     gameScreen.classList.add('dismantle-impact-shake');
     setTimeout(() => gameScreen.classList.remove('dismantle-impact-shake'), 450);
@@ -3152,11 +3215,220 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 700);
   }
 
-  function executeTargetDismantledBurnOut(targetId) {
+  // --------------------------------------------------------------------------
+  // CLEAVE TECHNIQUE (Consistent slashes for 3 seconds)
+  // --------------------------------------------------------------------------
+  function executeCleaveAttack(targetId) {
+    if (!isLeEmPlayer()) return;
     const target = roomState.players.find(p => p.id === targetId);
     if (!target || target.burnedOut) return;
 
-    const burnedPos = target.pos ? { r: target.pos.r, c: target.pos.c } : null;
+    // Play cleave.mp3 immediately at the exact instant the player is selected
+    playAudio('audio/cleave.mp3', 1.0);
+
+    const payload = {
+      casterId: playerProfile.id,
+      targetId: targetId,
+      casterPos: playerProfile.pos ? { r: playerProfile.pos.r, c: playerProfile.pos.c } : null,
+      targetPos: target.pos ? { r: target.pos.r, c: target.pos.c } : null
+    };
+
+    // Broadcast to all clients in the match
+    broadcastEvent('sukuna_cleave', payload);
+
+    // Execute locally
+    performSukunaCleaveSequence(playerProfile.id, targetId, payload);
+  }
+
+  function performSukunaCleaveSequence(casterId, targetId, payload = {}) {
+    const caster = roomState.players.find(p => p.id === casterId);
+    const target = roomState.players.find(p => p.id === targetId);
+
+    const cPos = (caster && caster.pos) || payload.casterPos || null;
+    const tPos = (target && target.pos) || payload.targetPos || null;
+
+    // 1. Play cleave.mp3 immediately at the exact instant the button/player was selected
+    playAudio('audio/cleave.mp3', 1.0);
+
+    // 2. Chant speech bubble on caster circle: "Cleave..." (stays 2 seconds then fades out)
+    if (cPos) {
+      const casterCell = getCellElem(cPos.r, cPos.c);
+      if (casterCell) {
+        showSukunaChantBubble(casterCell, 'Cleave...');
+      }
+    }
+
+    // 3. Consistent continuous slashing barrage for 3 full seconds!
+    let targetCell = tPos ? getCellElem(tPos.r, tPos.c) : null;
+    triggerCleaveConsistentBarrageVFX(targetCell, 3000);
+
+    // 4. After 3 seconds consistent slashes + 0.5 seconds rest (3500ms total), the target burns out
+    setTimeout(() => {
+      executeTargetDismantledBurnOut(targetId, casterId, tPos, 'Cleave');
+    }, 3500);
+  }
+
+  function triggerCleaveConsistentBarrageVFX(targetCell, durationMs = 3000) {
+    let centerX = window.innerWidth / 2;
+    let centerY = window.innerHeight / 2;
+    let marble = null;
+
+    if (targetCell) {
+      marble = targetCell.querySelector('.marble-sphere') || targetCell;
+      const rect = marble.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        centerX = rect.left + rect.width / 2;
+        centerY = rect.top + rect.height / 2;
+      } else {
+        const cellRect = targetCell.getBoundingClientRect();
+        if (cellRect.width > 0 && cellRect.height > 0) {
+          centerX = cellRect.left + cellRect.width / 2;
+          centerY = cellRect.top + cellRect.height / 2;
+        }
+      }
+
+      if (marble && marble.classList.contains('marble-sphere')) {
+        marble.classList.add('cleave-bisected-heavy');
+        const scar1 = document.createElement('div');
+        scar1.className = 'cleave-cross-scar';
+        scar1.style.transform = 'translateY(-50%) rotate(35deg)';
+        marble.appendChild(scar1);
+
+        const scar2 = document.createElement('div');
+        scar2.className = 'cleave-cross-scar';
+        scar2.style.transform = 'translateY(-50%) rotate(-45deg)';
+        marble.appendChild(scar2);
+
+        setTimeout(() => {
+          scar1.remove();
+          scar2.remove();
+          marble.classList.remove('cleave-bisected-heavy');
+        }, durationMs + 800);
+      }
+    }
+
+    const existing = document.querySelector('.cleave-barrage-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'cleave-barrage-overlay';
+    overlay.style.left = `${centerX}px`;
+    overlay.style.top = `${centerY}px`;
+    overlay.innerHTML = `
+      <div class="cleave-barrage-core-vortex"></div>
+    `;
+    document.body.appendChild(overlay);
+
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('cleave-continuous-shake');
+    if (boardGrid) boardGrid.classList.add('cleave-continuous-shake');
+
+    // Consistent rapid slash spawning every 95ms throughout the 3 seconds
+    const slashInterval = setInterval(() => {
+      const angle = (Math.random() * 360) - 180;
+      const scale = 0.85 + Math.random() * 0.45;
+      const streak = document.createElement('div');
+      streak.className = 'cleave-streak';
+      streak.style.transform = `rotate(${angle}deg) scale(${scale})`;
+      streak.innerHTML = `
+        <div class="cleave-streak-black"></div>
+        <div class="cleave-streak-white"></div>
+      `;
+      overlay.appendChild(streak);
+
+      // Cursed blood sparks
+      for (let s = 0; s < 3; s++) {
+        const spark = document.createElement('div');
+        spark.className = 'cleave-spark';
+        const dist = 30 + Math.random() * 65;
+        const sparkAngle = Math.random() * Math.PI * 2;
+        spark.style.setProperty('--tx', `${Math.cos(sparkAngle) * dist}px`);
+        spark.style.setProperty('--ty', `${Math.sin(sparkAngle) * dist}px`);
+        overlay.appendChild(spark);
+        setTimeout(() => spark.remove(), 280);
+      }
+
+      setTimeout(() => streak.remove(), 220);
+    }, 95);
+
+    // Stop barrage after 3.0 seconds
+    setTimeout(() => {
+      clearInterval(slashInterval);
+      gameScreen.classList.remove('cleave-continuous-shake');
+      if (boardGrid) boardGrid.classList.remove('cleave-continuous-shake');
+
+      const finalFlash = document.createElement('div');
+      finalFlash.className = 'dismantle-impact-flash';
+      overlay.appendChild(finalFlash);
+
+      setTimeout(() => {
+        overlay.remove();
+      }, 500);
+    }, durationMs);
+  }
+
+  // --------------------------------------------------------------------------
+  // DOMAIN EXPANSION: MALEVOLENT SHRINE
+  // --------------------------------------------------------------------------
+  function executeDomainAttack(targetId) {
+    if (!isLeEmPlayer()) return;
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target || target.burnedOut) return;
+
+    // Play domainexpansion.mp3 immediately at the exact instant the player is selected
+    playAudio('audio/domainexpansion.mp3', 1.0);
+
+    const payload = {
+      casterId: playerProfile.id,
+      targetId: targetId,
+      casterPos: playerProfile.pos ? { r: playerProfile.pos.r, c: playerProfile.pos.c } : null,
+      targetPos: target.pos ? { r: target.pos.r, c: target.pos.c } : null
+    };
+
+    // Broadcast to all clients in the match
+    broadcastEvent('sukuna_domain', payload);
+
+    // Execute locally
+    performSukunaDomainSequence(playerProfile.id, targetId, payload);
+  }
+
+  function performSukunaDomainSequence(casterId, targetId, payload = {}) {
+    const caster = roomState.players.find(p => p.id === casterId);
+    const target = roomState.players.find(p => p.id === targetId);
+
+    const cPos = (caster && caster.pos) || payload.casterPos || null;
+    const tPos = (target && target.pos) || payload.targetPos || null;
+
+    // Play domain audio
+    playAudio('audio/domainexpansion.mp3', 1.0);
+
+    // Chant speech bubble on caster circle: "Domain Expansion..." (stays 2 seconds then fades out)
+    if (cPos) {
+      const casterCell = getCellElem(cPos.r, cPos.c);
+      if (casterCell) {
+        showSukunaChantBubble(casterCell, 'Domain Expansion...');
+      }
+    }
+
+    showToast('⛩️ DOMAIN EXPANSION: MALEVOLENT SHRINE ⛩️', 'error');
+
+    // Trigger full board slashing barrage and domain aura
+    let targetCell = tPos ? getCellElem(tPos.r, tPos.c) : null;
+    triggerCleaveConsistentBarrageVFX(targetCell, 3000);
+
+    setTimeout(() => {
+      executeTargetDismantledBurnOut(targetId, casterId, tPos, 'Domain Expansion');
+    }, 3500);
+  }
+
+  // --------------------------------------------------------------------------
+  // Authoritative Technique Burn Out and Match Resolution
+  // --------------------------------------------------------------------------
+  function executeTargetDismantledBurnOut(targetId, casterId, fallbackPos, techniqueName = 'Dismantle') {
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target || target.burnedOut) return;
+
+    const burnedPos = target.pos ? { r: target.pos.r, c: target.pos.c } : fallbackPos;
 
     target.burnedOut = true;
 
@@ -3179,11 +3451,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isMe) playerProfile.isSpectating = false;
 
       const winner = roomState.players.find(p => p.id !== target.id);
-      showToast(`⚔️ ${target.name} was Dismantled!`, 'error');
+      showToast(`⚔️ ${target.name} was defeated by ${techniqueName}!`, 'error');
+
+      // Authoritative broadcast fallback from caster to sync all peers and end game
+      if (playerProfile.id === casterId) {
+        broadcastEvent('player_burn_out', {
+          playerId: target.id,
+          burnedPos: burnedPos,
+          isSurrender: true,
+          winnerId: winner ? winner.id : null
+        });
+        saveActiveSession();
+        broadcastEvent('room_sync', roomState);
+      }
 
       setTimeout(() => {
         if (winner) {
-          triggerVictory(winner, `${winner.name} Wins! ${target.name} was Dismantled.`);
+          triggerVictory(winner, `${winner.name} Wins! ${target.name} was ${techniqueName}d.`);
         }
       }, 900);
       return;
@@ -3193,7 +3477,18 @@ document.addEventListener('DOMContentLoaded', () => {
     target.isSpectating = true;
     if (isMe) playerProfile.isSpectating = true;
 
-    showToast(`⚔️ ${target.name} was Dismantled and burned out!`, 'error');
+    showToast(`⚔️ ${target.name} was defeated by ${techniqueName} and burned out!`, 'error');
+
+    if (playerProfile.id === casterId) {
+      broadcastEvent('player_burn_out', {
+        playerId: target.id,
+        burnedPos: burnedPos,
+        isSurrender: false,
+        nextTurnIndex: roomState.currentTurnIndex
+      });
+      saveActiveSession();
+      broadcastEvent('room_sync', roomState);
+    }
 
     if (checkBurnOutWinCondition()) return;
 
@@ -3210,21 +3505,21 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnSukunaDismantle) {
     btnSukunaDismantle.addEventListener('click', () => {
       if (!isLeEmPlayer() || !isSukunaModeActive) return;
-      openDismantleTargetModal();
+      openTechniqueTargetModal('dismantle');
     });
   }
 
   if (btnSukunaCleave) {
     btnSukunaCleave.addEventListener('click', () => {
       if (!isLeEmPlayer() || !isSukunaModeActive) return;
-      showToast('Cleave: Awaiting master instruction...', 'neutral');
+      openTechniqueTargetModal('cleave');
     });
   }
 
   if (btnSukunaDomain) {
     btnSukunaDomain.addEventListener('click', () => {
       if (!isLeEmPlayer() || !isSukunaModeActive) return;
-      showToast('Domain Expansion: Malevolent Shrine: Awaiting master instruction...', 'neutral');
+      openTechniqueTargetModal('domain');
     });
   }
 

@@ -9,7 +9,7 @@
     content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
 
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=2.2">
 
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -298,9 +298,9 @@
        ========================================================================= -->
   <div id="modal-dismantle-target" class="modal-overlay">
     <div class="glass-card sukuna-modal-card">
-      <div class="sukuna-modal-tag">JUJUTSU TECHNIQUE</div>
-      <h2 class="sukuna-modal-title">DISMANTLE <span>「 捌 」</span></h2>
-      <p class="sukuna-modal-desc">Select an opponent to slice through with an invisible slash.</p>
+      <div id="sukuna-modal-tag" class="sukuna-modal-tag">JUJUTSU TECHNIQUE</div>
+      <h2 id="sukuna-modal-title" class="sukuna-modal-title">DISMANTLE <span>「 捌 」</span></h2>
+      <p id="sukuna-modal-desc" class="sukuna-modal-desc">Select an opponent to slice through with an invisible slash.</p>
       <div id="dismantle-targets-list" class="dismantle-targets-list">
         <!-- Populated dynamically via JS with active opponent buttons -->
       </div>
@@ -339,9 +339,9 @@
   <canvas id="confetti-canvas"></canvas>
 
   <!-- JS Game Engines -->
-  <script src="js/supabase-config.js"></script>
-  <script src="js/pathfinding.js"></script>
-  <script src="js/game.js"></script>
+  <script src="js/supabase-config.js?v=2.2"></script>
+  <script src="js/pathfinding.js?v=2.2"></script>
+  <script src="js/game.js?v=2.2"></script>
 </body>
 
 </html>

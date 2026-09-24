@@ -2526,18 +2526,16 @@ select.input-field option {
    Le Em Circle Fast Typewriter Speech Chant Bubble ("Dismantle...")
    -------------------------------------------------------------------------- */
 .sukuna-chant-bubble {
-  position: absolute;
-  bottom: calc(100% + 10px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  transform: translate(-50%, -100%);
   background: linear-gradient(135deg, #070204 0%, #170408 100%);
   border: 1.5px solid #ff0033;
   border-radius: 8px;
-  padding: 4px 10px;
+  padding: 5px 12px;
   white-space: nowrap;
-  z-index: 60;
+  z-index: 9999999;
   pointer-events: none;
-  box-shadow: 0 0 18px rgba(255, 0, 51, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.95);
+  box-shadow: 0 0 22px rgba(255, 0, 51, 0.85), inset 0 0 10px rgba(0, 0, 0, 0.95);
   animation: chantBubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
 }
 
@@ -2554,7 +2552,7 @@ select.input-field option {
 
 .sukuna-chant-text {
   font-family: 'Cinzel', 'Noto Serif JP', serif, monospace;
-  font-size: 0.88rem;
+  font-size: 0.92rem;
   font-weight: 900;
   color: #ffffff;
   letter-spacing: 0.08em;
@@ -2566,15 +2564,15 @@ select.input-field option {
   width: 2px;
   height: 0.88em;
   background: #ff0033;
-  margin-left: 2px;
+  margin-left: 3px;
   vertical-align: middle;
   box-shadow: 0 0 6px #ff0033;
   animation: chantCaretBlink 0.25s infinite alternate;
 }
 
 @keyframes chantBubblePop {
-  0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.6); }
-  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  0% { opacity: 0; transform: translate(-50%, -85%) scale(0.6); }
+  100% { opacity: 1; transform: translate(-50%, -100%) scale(1); }
 }
 
 @keyframes chantCaretBlink {
@@ -2811,6 +2809,161 @@ select.input-field option {
   15%, 85% { transform: translate3d(-7px, 5px, 0); }
   30%, 70% { transform: translate3d(8px, -6px, 0); }
   45%, 60% { transform: translate3d(-6px, -4px, 0); }
+}
+
+/* --------------------------------------------------------------------------
+   Cleave 3-Second Consistent Barrage Slashing VFX
+   -------------------------------------------------------------------------- */
+.cleave-barrage-overlay {
+  position: fixed;
+  pointer-events: none;
+  z-index: 999999;
+  transform: translate(-50%, -50%);
+  width: 420px;
+  height: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.cleave-barrage-core-vortex {
+  position: absolute;
+  width: 170px;
+  height: 170px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 0, 51, 0.5) 0%, rgba(0, 0, 0, 0.95) 55%, transparent 75%);
+  box-shadow: 0 0 50px #ff0033, 0 0 100px #000000;
+  animation: cleaveVortexPulse 0.35s infinite alternate;
+}
+
+@keyframes cleaveVortexPulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(1.25); opacity: 1; }
+}
+
+.cleave-streak {
+  position: absolute;
+  width: 420px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  opacity: 0;
+  animation: cleaveSingleSlashSwipe 0.22s cubic-bezier(0.12, 0.85, 0.32, 1) forwards;
+}
+
+.cleave-streak-black {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent 0%, #000000 12%, #080204 50%, #000000 88%, transparent 100%);
+  box-shadow: 0 0 14px #000000, 0 0 28px rgba(0, 0, 0, 0.95);
+  clip-path: polygon(0% 50%, 12% 5%, 88% 5%, 100% 50%, 88% 95%, 12% 95%);
+}
+
+.cleave-streak-white {
+  position: absolute;
+  width: 100%;
+  height: 3.5px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.8) 12%, #ffffff 50%, rgba(255, 255, 255, 0.8) 88%, transparent 100%);
+  box-shadow: 0 0 8px #ffffff, 0 0 18px #ff0033;
+}
+
+@keyframes cleaveSingleSlashSwipe {
+  0% {
+    transform: translate(-150px, 0) scaleX(0.2) scaleY(0.4);
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  50% {
+    transform: translate(0, 0) scaleX(1.3) scaleY(1.2);
+    opacity: 1;
+  }
+  80% {
+    transform: translate(120px, 0) scaleX(1.05) scaleY(0.7);
+    opacity: 0.9;
+  }
+  100% {
+    transform: translate(180px, 0) scaleX(0.7) scaleY(0.1);
+    opacity: 0;
+  }
+}
+
+.cleave-spark {
+  position: absolute;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px #ff0033, 0 0 16px #ff0033;
+  animation: cleaveSparkFly 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cleaveSparkFly {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--tx), var(--ty)) scale(0.2); opacity: 0; }
+}
+
+/* Continuous 3-Second Violent Screen & Board Shaking */
+.cleave-continuous-shake {
+  animation: cleaveContinuousRumble 0.11s infinite alternate !important;
+}
+
+@keyframes cleaveContinuousRumble {
+  0% { transform: translate3d(-5px, 4px, 0) rotate(-0.5deg); }
+  50% { transform: translate3d(6px, -5px, 0) rotate(0.6deg); }
+  100% { transform: translate3d(-4px, -3px, 0) rotate(-0.3deg); }
+}
+
+.marble-sphere.cleave-bisected-heavy {
+  animation: cleaveMarbleViolentPulse 0.12s infinite alternate !important;
+}
+
+@keyframes cleaveMarbleViolentPulse {
+  0% { transform: scale(1.08) translate(-3px, 2px); filter: brightness(2.6) contrast(2.6) drop-shadow(0 0 16px #ff0033); }
+  100% { transform: scale(0.92) translate(3px, -2px); filter: brightness(1.2) contrast(1.5); }
+}
+
+.cleave-cross-scar {
+  position: absolute;
+  top: 50%;
+  left: -30%;
+  width: 160%;
+  height: 4.5px;
+  background: #000000;
+  box-shadow: 0 0 6px #ffffff, 0 0 16px #ff0033;
+  border-radius: 2px;
+  z-index: 35;
+}
+
+.cleave-strike-tag {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #ff0033;
+  background: rgba(255, 0, 51, 0.15);
+  border: 1px solid rgba(255, 0, 51, 0.6);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 10px rgba(255, 0, 51, 0.4);
+}
+
+.domain-strike-tag {
+  font-family: var(--font-heading);
+  font-size: 0.76rem;
+  font-weight: 800;
+  color: #a855f7;
+  background: rgba(168, 85, 247, 0.15);
+  border: 1px solid rgba(168, 85, 247, 0.6);
+  padding: 0.25rem 0.6rem;
+  border-radius: 6px;
+  letter-spacing: 0.08em;
+  box-shadow: 0 0 10px rgba(168, 85, 247, 0.4);
 }
 
 /* --------------------------------------------------------------------------
