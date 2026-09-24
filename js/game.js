@@ -63,6 +63,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let activeCrosshairs = { h: null, v: null };
   let lastGuidePos = { clientX: 0, clientY: 0 };
 
+  function isMobileDevice() {
+    return window.matchMedia('(pointer: coarse)').matches ||
+      ('ontouchstart' in window && window.innerWidth <= 1024) ||
+      (navigator.maxTouchPoints > 0 && window.innerWidth <= 1024);
+  }
+
   // --------------------------------------------------------------------------
   // DOM Element References & Toast System
   // --------------------------------------------------------------------------
@@ -1215,14 +1221,22 @@ document.addEventListener('DOMContentLoaded', () => {
         btnRotateWall.style.display = 'inline-block';
         btnRotateWall.textContent = `Rotate (${wallPlacementState.orientation})`;
       }
-      boardGrid.classList.add('wall-mode-active');
       clearMoveHighlights();
 
-      // Default wall position in the middle of the board
-      const mid = Math.max(0, Math.floor((GRID_SIZE - 2) / 2));
-      wallPlacementState.hoverR = mid;
-      wallPlacementState.hoverC = mid;
-      renderWallPreview(mid, mid);
+      if (isMobileDevice()) {
+        boardGrid.classList.add('wall-mode-active');
+        // Default wall position in the middle of the board on mobile
+        const mid = Math.max(0, Math.floor((GRID_SIZE - 2) / 2));
+        wallPlacementState.hoverR = mid;
+        wallPlacementState.hoverC = mid;
+        renderWallPreview(mid, mid);
+      } else {
+        boardGrid.classList.remove('wall-mode-active');
+        if (activeDragHud) {
+          activeDragHud.remove();
+          activeDragHud = null;
+        }
+      }
     }
   }
 
@@ -1704,6 +1718,15 @@ document.addEventListener('DOMContentLoaded', () => {
       const wallC = Math.min(c, GRID_SIZE - 2);
       wallPlacementState.hoverR = wallR;
       wallPlacementState.hoverC = wallC;
+
+      if (!isMobileDevice()) {
+        // ON PC / LAPTOP: Click directly places the wall!
+        confirmWallPlacement();
+        return;
+      }
+
+      // ON MOBILE: Restrict direct click to place!
+      // Only reposition the preview, player must tap the "PLACE" button to confirm!
       renderWallPreview(wallR, wallC);
       return;
     }
@@ -1812,60 +1835,67 @@ document.addEventListener('DOMContentLoaded', () => {
       activeCrosshairs.v.classList.remove('invalid');
     }
 
-    // 3. Floating Mobile Guide HUD Pill above the touch point
-    if (!activeDragHud) {
-      activeDragHud = document.createElement('div');
-      activeDragHud.className = 'wall-drag-hud';
-      document.body.appendChild(activeDragHud);
+    // 3. Floating Mobile Guide HUD Pill above the touch point - ONLY on mobile!
+    if (isMobileDevice()) {
+      if (!activeDragHud) {
+        activeDragHud = document.createElement('div');
+        activeDragHud.className = 'wall-drag-hud';
+        document.body.appendChild(activeDragHud);
 
-      activeDragHud.addEventListener('pointerdown', (e) => {
-        e.stopPropagation();
-      });
+        activeDragHud.addEventListener('pointerdown', (e) => {
+          e.stopPropagation();
+        });
 
-      activeDragHud.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const placeBtn = e.target.closest('.hud-place-btn');
-        if (placeBtn) {
-          confirmWallPlacement();
-          return;
-        }
-        const rotateBtn = e.target.closest('.hud-rotate-btn');
-        const rotatableText = e.target.closest('.hud-rotatable');
-        if (rotateBtn || rotatableText) {
-          toggleWallOrientation();
-          return;
-        }
-      });
-    }
-
-    activeDragHud.className = `wall-drag-hud ${check.valid ? 'hud-valid' : 'hud-invalid'}`;
-    const statusText = check.valid
-      ? `Wall (${wallPlacementState.orientation === 'H' ? 'Horiz' : 'Vert'})`
-      : (check.reason || 'Blocked');
-
-    activeDragHud.innerHTML = `
-      <div class="hud-status-icon">
-        ${check.valid
-        ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
-        : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+        activeDragHud.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const placeBtn = e.target.closest('.hud-place-btn');
+          if (placeBtn) {
+            confirmWallPlacement();
+            return;
+          }
+          const rotateBtn = e.target.closest('.hud-rotate-btn');
+          const rotatableText = e.target.closest('.hud-rotatable');
+          if (rotateBtn || rotatableText) {
+            toggleWallOrientation();
+            return;
+          }
+        });
       }
-      </div>
-      <span class="hud-text hud-rotatable" title="Tap to rotate">
-        ${statusText}
-      </span>
-      <button type="button" class="hud-rotate-btn" title="Rotate Wall">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
-      </button>
-      <button type="button" class="hud-place-btn ${check.valid ? 'can-place' : 'disabled'}" title="Confirm Wall Placement">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        Place
-      </button>
-    `;
 
-    const hudX = Math.max(110, Math.min(window.innerWidth - 110, clientX));
-    const hudY = (clientY < 130) ? (clientY + 65) : Math.max(40, clientY - 70);
-    activeDragHud.style.left = `${hudX}px`;
-    activeDragHud.style.top = `${hudY}px`;
+      activeDragHud.className = `wall-drag-hud ${check.valid ? 'hud-valid' : 'hud-invalid'}`;
+      const statusText = check.valid
+        ? `Wall (${wallPlacementState.orientation === 'H' ? 'Horiz' : 'Vert'})`
+        : (check.reason || 'Blocked');
+
+      activeDragHud.innerHTML = `
+        <div class="hud-status-icon">
+          ${check.valid
+          ? '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>'
+          : '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>'
+        }
+        </div>
+        <span class="hud-text hud-rotatable" title="Tap to rotate">
+          ${statusText}
+        </span>
+        <button type="button" class="hud-rotate-btn" title="Rotate Wall">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg>
+        </button>
+        <button type="button" class="hud-place-btn ${check.valid ? 'can-place' : 'disabled'}" title="Confirm Wall Placement">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          Place
+        </button>
+      `;
+
+      const hudX = Math.max(110, Math.min(window.innerWidth - 110, clientX));
+      const hudY = (clientY < 130) ? (clientY + 65) : Math.max(40, clientY - 70);
+      activeDragHud.style.left = `${hudX}px`;
+      activeDragHud.style.top = `${hudY}px`;
+    } else {
+      if (activeDragHud) {
+        activeDragHud.remove();
+        activeDragHud = null;
+      }
+    }
 
     // 4. Touch Beacon under finger on touch devices during active drag
     if (isDraggingWall && window.matchMedia('(pointer: coarse)').matches) {
@@ -1903,9 +1933,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleCellHover(r, c) {
     if (currentActionMode !== 'WALL' || isDraggingWall) return;
-    wallPlacementState.hoverR = r;
-    wallPlacementState.hoverC = c;
-    renderWallPreview(r, c);
+    if (isMobileDevice()) return;
+    wallPlacementState.hoverR = Math.min(r, GRID_SIZE - 2);
+    wallPlacementState.hoverC = Math.min(c, GRID_SIZE - 2);
+    renderWallPreview(wallPlacementState.hoverR, wallPlacementState.hoverC);
   }
 
   // Pointer & Touch Events for Drag-to-Place Wall
@@ -1915,19 +1946,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) return;
 
     if (currentActionMode === 'WALL') {
-      isDraggingWall = true;
-      boardGrid.classList.add('wall-drag-active');
-      try {
-        boardGrid.setPointerCapture(e.pointerId);
-      } catch (err) {}
+      if (isMobileDevice() || e.pointerType === 'touch') {
+        isDraggingWall = true;
+        boardGrid.classList.add('wall-drag-active');
+        try {
+          boardGrid.setPointerCapture(e.pointerId);
+        } catch (err) {}
 
-      const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
-      wallPlacementState.hoverR = seam.r;
-      wallPlacementState.hoverC = seam.c;
-      renderWallDragGuide(e.clientX, e.clientY, seam.r, seam.c);
+        const seam = getNearestWallSeam(e.clientX, e.clientY, wallPlacementState.orientation);
+        wallPlacementState.hoverR = seam.r;
+        wallPlacementState.hoverC = seam.c;
+        renderWallDragGuide(e.clientX, e.clientY, seam.r, seam.c);
 
-      if (e.pointerType === 'touch') {
-        e.preventDefault();
+        if (e.pointerType === 'touch') {
+          e.preventDefault();
+        }
       }
     }
   });

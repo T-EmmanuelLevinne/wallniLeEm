@@ -1969,6 +1969,13 @@ select.input-field option {
   opacity: 0.65;
 }
 
+/* Hide floating mobile drag HUD on PC / Laptop with fine mouse pointer */
+@media (pointer: fine) and (min-width: 1025px) {
+  .wall-drag-hud {
+    display: none !important;
+  }
+}
+
 /* ==========================================================================
    Developer Tag (Visual only, no commands)
    ========================================================================== */
