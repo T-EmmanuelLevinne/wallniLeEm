@@ -90,6 +90,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'player_sukuna_mode' }, ({ payload }) => {
       if (callbacks.onPlayerSukunaMode) callbacks.onPlayerSukunaMode(payload);
     })
+    .on('broadcast', { event: 'sukuna_dismantle' }, ({ payload }) => {
+      if (callbacks.onSukunaDismantle) callbacks.onSukunaDismantle(payload);
+    })
     .on('broadcast', { event: 'room_reconnect_query' }, ({ payload }) => {
       if (callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
     })
@@ -142,6 +145,7 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'turn_timeout' && callbacks.onTurnTimeout) callbacks.onTurnTimeout(payload);
     if (type === 'player_burn_out' && callbacks.onPlayerBurnOut) callbacks.onPlayerBurnOut(payload);
     if (type === 'player_sukuna_mode' && callbacks.onPlayerSukunaMode) callbacks.onPlayerSukunaMode(payload);
+    if (type === 'sukuna_dismantle' && callbacks.onSukunaDismantle) callbacks.onSukunaDismantle(payload);
     if (type === 'room_reconnect_query' && callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
   };
 

@@ -226,6 +226,22 @@
             </button>
           </div>
 
+          <!-- Sukuna Arsenal Abilities Bar (Dismantle, Cleave, Domain Expansion) -->
+          <div id="sukuna-arsenal-bar" class="sukuna-arsenal-bar" style="display: none;">
+            <button id="btn-sukuna-dismantle" class="btn-sukuna-tech btn-dismantle" title="Select a target to Dismantle">
+              <span class="tech-kanji">捌</span>
+              <span class="tech-label">Dismantle</span>
+            </button>
+            <button id="btn-sukuna-cleave" class="btn-sukuna-tech btn-cleave" title="Cleave technique">
+              <span class="tech-kanji">解</span>
+              <span class="tech-label">Cleave</span>
+            </button>
+            <button id="btn-sukuna-domain" class="btn-sukuna-tech btn-domain" title="Domain Expansion: Malevolent Shrine">
+              <span class="tech-kanji">伏魔御廚子</span>
+              <span class="tech-label">Domain Expansion: Malevolent Shrine</span>
+            </button>
+          </div>
+
           <!-- Controls Hint Banner -->
           <div class="controls-hint">
             <span class="hint-desktop"><span class="key-cap">Click Marble</span> Show Move Targets</span>
@@ -273,6 +289,23 @@
       <div class="burn-modal-actions">
         <button id="btn-cancel-burn" class="btn-secondary">Cancel</button>
         <button id="btn-confirm-burn" class="btn-burn-confirm">Yes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
+       SUKUNA DISMANTLE TARGET SELECTION MODAL
+       ========================================================================= -->
+  <div id="modal-dismantle-target" class="modal-overlay">
+    <div class="glass-card sukuna-modal-card">
+      <div class="sukuna-modal-tag">JUJUTSU TECHNIQUE</div>
+      <h2 class="sukuna-modal-title">DISMANTLE <span>「 捌 」</span></h2>
+      <p class="sukuna-modal-desc">Select an opponent to slice through with an invisible slash.</p>
+      <div id="dismantle-targets-list" class="dismantle-targets-list">
+        <!-- Populated dynamically via JS with active opponent buttons -->
+      </div>
+      <div class="sukuna-modal-actions">
+        <button id="btn-cancel-dismantle" class="btn-secondary">Cancel</button>
       </div>
     </div>
   </div>

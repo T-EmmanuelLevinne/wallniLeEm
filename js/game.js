@@ -127,6 +127,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSukunaMode = document.getElementById('btn-sukuna-mode');
   let isSukunaButtonRevealed = false;
   let isSukunaModeActive = false;
+  const sukunaArsenalBar = document.getElementById('sukuna-arsenal-bar');
+  const btnSukunaDismantle = document.getElementById('btn-sukuna-dismantle');
+  const btnSukunaCleave = document.getElementById('btn-sukuna-cleave');
+  const btnSukunaDomain = document.getElementById('btn-sukuna-domain');
+  const modalDismantleTarget = document.getElementById('modal-dismantle-target');
+  const btnCancelDismantle = document.getElementById('btn-cancel-dismantle');
+  const dismantleTargetsList = document.getElementById('dismantle-targets-list');
   const modalBurnConfirm = document.getElementById('modal-burn-confirm');
   const btnCancelBurn = document.getElementById('btn-cancel-burn');
   const btnConfirmBurn = document.getElementById('btn-confirm-burn');
@@ -872,6 +879,9 @@ document.addEventListener('DOMContentLoaded', () => {
           renderBoardState();
         }
       },
+      onSukunaDismantle: (payload) => {
+        performSukunaDismantleSequence(payload.casterId, payload.targetId);
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
@@ -1193,6 +1203,9 @@ document.addEventListener('DOMContentLoaded', () => {
     showScreen(screens.game);
     if (isSukunaButtonRevealed && btnSukunaMode) {
       btnSukunaMode.style.display = 'inline-flex';
+    }
+    if (isSukunaModeActive && isLeEmPlayer() && sukunaArsenalBar) {
+      sukunaArsenalBar.style.display = 'flex';
     }
     saveActiveSession();
     renderBoardState();
@@ -2864,6 +2877,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    if (sukunaArsenalBar) {
+      sukunaArsenalBar.style.display = isSukunaModeActive ? 'flex' : 'none';
+    }
+
     if (isSukunaModeActive) {
       // 1. Play domain expansion audio
       playAudio('audio/domainexpansion.mp3', 0.95);
@@ -2990,6 +3007,263 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnSukunaMode) {
     btnSukunaMode.addEventListener('click', () => {
       handleSukunaModeToggle();
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Sukuna Arsenal & Dismantle Technique Handlers
+  // --------------------------------------------------------------------------
+  function openDismantleTargetModal() {
+    if (!modalDismantleTarget || !dismantleTargetsList) return;
+    dismantleTargetsList.innerHTML = '';
+
+    const activeOpponents = roomState.players.filter(p => p.id !== playerProfile.id && !p.burnedOut && p.pos);
+
+    if (activeOpponents.length === 0) {
+      showToast('No active opponents available to dismantle!', 'error');
+      return;
+    }
+
+    activeOpponents.forEach(opp => {
+      const btn = document.createElement('button');
+      btn.className = 'dismantle-target-btn';
+      btn.innerHTML = `
+        <div class="dismantle-target-info">
+          <div class="dismantle-target-marble marble-${opp.color}"></div>
+          <span class="dismantle-target-name">${escapeHTML(opp.name)}</span>
+          <span class="dismantle-target-coords">(${opp.pos.r}, ${opp.pos.c})</span>
+        </div>
+        <div class="dismantle-strike-tag">DISMANTLE ⚔️</div>
+      `;
+
+      btn.addEventListener('click', () => {
+        modalDismantleTarget.classList.remove('active');
+        executeDismantleAttack(opp.id);
+      });
+
+      dismantleTargetsList.appendChild(btn);
+    });
+
+    modalDismantleTarget.classList.add('active');
+  }
+
+  function executeDismantleAttack(targetId) {
+    if (!isLeEmPlayer()) return;
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target || target.burnedOut) return;
+
+    // Broadcast to all clients in the match
+    broadcastEvent('sukuna_dismantle', {
+      casterId: playerProfile.id,
+      targetId: targetId
+    });
+
+    // Execute locally
+    performSukunaDismantleSequence(playerProfile.id, targetId);
+  }
+
+  function performSukunaDismantleSequence(casterId, targetId) {
+    const caster = roomState.players.find(p => p.id === casterId);
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target) return;
+
+    // 1. Play dismantle.mp3 immediately at the exact instant the button was clicked
+    playAudio('audio/dismantle.mp3', 1.0);
+
+    // 2. Chant speech bubble on caster circle: "Dismantle..." typed fast
+    if (caster && caster.pos) {
+      const casterCell = getCellElem(caster.pos.r, caster.pos.c);
+      if (casterCell) {
+        showSukunaChantBubble(casterCell, 'Dismantle...');
+      }
+    }
+
+    // 3. Animated white & black visible slash (black dominant) cutting through target circle in grid
+    setTimeout(() => {
+      if (target.pos) {
+        const targetCell = getCellElem(target.pos.r, target.pos.c);
+        if (targetCell) {
+          triggerDismantleSlashVFX(targetCell);
+        }
+      }
+    }, 320);
+
+    // 4. After all of that animation slash (slash runs ~450ms, ends at ~770ms),
+    // give it 0.5 seconds rest (500ms delay: 770ms + 500ms = ~1270ms),
+    // THEN the targeted player BURNS OUT!
+    setTimeout(() => {
+      executeTargetDismantledBurnOut(targetId);
+    }, 1270);
+  }
+
+  function showSukunaChantBubble(cell, text) {
+    const existing = cell.querySelector('.sukuna-chant-bubble');
+    if (existing) existing.remove();
+
+    const bubble = document.createElement('div');
+    bubble.className = 'sukuna-chant-bubble';
+    bubble.innerHTML = `
+      <span class="sukuna-chant-text"></span>
+      <span class="sukuna-chant-caret"></span>
+    `;
+    cell.appendChild(bubble);
+
+    const textEl = bubble.querySelector('.sukuna-chant-text');
+    let idx = 0;
+    const interval = setInterval(() => {
+      idx++;
+      textEl.textContent = text.slice(0, idx);
+      if (idx >= text.length) {
+        clearInterval(interval);
+        setTimeout(() => {
+          bubble.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+          bubble.style.opacity = '0';
+          bubble.style.transform = 'translateX(-50%) translateY(-10px)';
+          setTimeout(() => bubble.remove(), 400);
+        }, 1300);
+      }
+    }, 25);
+  }
+
+  function triggerDismantleSlashVFX(targetCell) {
+    const marble = targetCell.querySelector('.marble-sphere');
+    if (marble) {
+      marble.classList.add('dismantle-sliced-marble');
+      setTimeout(() => marble.classList.remove('dismantle-sliced-marble'), 600);
+    }
+
+    const slashContainer = document.createElement('div');
+    slashContainer.className = 'dismantle-slash-fx';
+    slashContainer.innerHTML = `
+      <svg class="dismantle-slash-svg" viewBox="0 0 120 120" preserveAspectRatio="none">
+        <defs>
+          <filter id="dismantle-black-aura" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#000000" flood-opacity="1"/>
+            <feDropShadow dx="0" dy="0" stdDeviation="7" flood-color="#000000" flood-opacity="0.95"/>
+          </filter>
+          <filter id="dismantle-white-core" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow dx="0" dy="0" stdDeviation="2" flood-color="#ffffff" flood-opacity="1"/>
+          </filter>
+        </defs>
+
+        <!-- Slash 1 (Dominant Black Blade with Razor White Spine) -->
+        <path class="slash-path-black s1" d="M -15,15 Q 50,65 135,105" 
+              stroke="#000000" stroke-width="15" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
+        <path class="slash-path-dark s1" d="M -15,15 Q 50,65 135,105" 
+              stroke="#150207" stroke-width="9" stroke-linecap="round" fill="none" />
+        <path class="slash-path-white s1" d="M -15,15 Q 50,65 135,105" 
+              stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+
+        <!-- Slash 2 (Counter Cross-Slash) -->
+        <path class="slash-path-black s2" d="M 130,10 Q 60,60 -10,110" 
+              stroke="#000000" stroke-width="13" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
+        <path class="slash-path-dark s2" d="M 130,10 Q 60,60 -10,110" 
+              stroke="#150207" stroke-width="7.5" stroke-linecap="round" fill="none" />
+        <path class="slash-path-white s2" d="M 130,10 Q 60,60 -10,110" 
+              stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+
+        <!-- Slash 3 (Central Piercing Transverse Cut) -->
+        <path class="slash-path-black s3" d="M -10,60 L 130,60" 
+              stroke="#000000" stroke-width="10" stroke-linecap="round" fill="none" filter="url(#dismantle-black-aura)" />
+        <path class="slash-path-white s3" d="M -10,60 L 130,60" 
+              stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" fill="none" filter="url(#dismantle-white-core)" />
+
+        <!-- Cursed Spatial Severance Specks -->
+        <circle cx="52" cy="56" r="3.2" fill="#ffffff" />
+        <circle cx="68" cy="64" r="4.2" fill="#000000" />
+        <circle cx="38" cy="46" r="3.8" fill="#000000" />
+      </svg>
+      <div class="slash-impact-flash"></div>
+    `;
+    targetCell.appendChild(slashContainer);
+
+    targetCell.classList.add('shake-anim');
+    setTimeout(() => targetCell.classList.remove('shake-anim'), 400);
+
+    setTimeout(() => {
+      slashContainer.remove();
+    }, 550);
+  }
+
+  function executeTargetDismantledBurnOut(targetId) {
+    const target = roomState.players.find(p => p.id === targetId);
+    if (!target || target.burnedOut) return;
+
+    const burnedPos = target.pos ? { r: target.pos.r, c: target.pos.c } : null;
+
+    target.burnedOut = true;
+
+    if (burnedPos) {
+      playPlayerBurnAnimation(burnedPos, target.id);
+    }
+
+    const isMe = (target.id === playerProfile.id);
+    if (isMe) {
+      playerProfile.burnedOut = true;
+      clearMoveHighlights();
+      document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+      updateBurnOutButtonUI();
+    }
+
+    const isTwoPlayerGame = (roomState.gameMode !== 'team' && roomState.players.length === 2);
+
+    if (isTwoPlayerGame) {
+      target.isSpectating = false;
+      if (isMe) playerProfile.isSpectating = false;
+
+      const winner = roomState.players.find(p => p.id !== target.id);
+      showToast(`⚔️ ${target.name} was Dismantled!`, 'error');
+
+      setTimeout(() => {
+        if (winner) {
+          triggerVictory(winner, `${winner.name} Wins! ${target.name} was Dismantled.`);
+        }
+      }, 900);
+      return;
+    }
+
+    // 3+ players: spectating mode
+    target.isSpectating = true;
+    if (isMe) playerProfile.isSpectating = true;
+
+    showToast(`⚔️ ${target.name} was Dismantled and burned out!`, 'error');
+
+    if (checkBurnOutWinCondition()) return;
+
+    // If it was the target's turn, advance turn
+    if (roomState.currentTurnIndex === roomState.players.indexOf(target)) {
+      const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+      advanceTurn(nextTurnIndex);
+    }
+
+    saveActiveSession();
+    renderBoardState();
+  }
+
+  if (btnSukunaDismantle) {
+    btnSukunaDismantle.addEventListener('click', () => {
+      if (!isLeEmPlayer() || !isSukunaModeActive) return;
+      openDismantleTargetModal();
+    });
+  }
+
+  if (btnSukunaCleave) {
+    btnSukunaCleave.addEventListener('click', () => {
+      if (!isLeEmPlayer() || !isSukunaModeActive) return;
+      showToast('Cleave: Awaiting master instruction...', 'neutral');
+    });
+  }
+
+  if (btnSukunaDomain) {
+    btnSukunaDomain.addEventListener('click', () => {
+      if (!isLeEmPlayer() || !isSukunaModeActive) return;
+      showToast('Domain Expansion: Malevolent Shrine: Awaiting master instruction...', 'neutral');
+    });
+  }
+
+  if (btnCancelDismantle) {
+    btnCancelDismantle.addEventListener('click', () => {
+      if (modalDismantleTarget) modalDismantleTarget.classList.remove('active');
     });
   }
 

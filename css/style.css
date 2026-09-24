@@ -2446,3 +2446,346 @@ select.input-field option {
   }
 }
 
+/* --------------------------------------------------------------------------
+   Sukuna Arsenal Abilities Bar (Dismantle, Cleave, Malevolent Shrine)
+   -------------------------------------------------------------------------- */
+.sukuna-arsenal-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+  width: 100%;
+  animation: sukunaArsenalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes sukunaArsenalSlideUp {
+  0% { opacity: 0; transform: translateY(14px) scale(0.95); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.btn-sukuna-tech {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.65rem 1.35rem;
+  font-family: var(--font-heading);
+  font-size: 0.88rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0e0508 0%, #1e090f 50%, #0a0204 100%);
+  border: 1.5px solid rgba(239, 68, 68, 0.5);
+  border-radius: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.btn-sukuna-tech .tech-kanji {
+  font-family: 'Cinzel', 'Noto Serif JP', serif, var(--font-heading);
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #ef4444;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.85);
+  line-height: 1;
+}
+
+.btn-sukuna-tech .tech-label {
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.4);
+}
+
+.btn-sukuna-tech:hover {
+  background: linear-gradient(135deg, #2b0b13 0%, #450f1a 50%, #1f060c 100%);
+  border-color: #f87171;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.8), inset 0 0 12px rgba(255, 0, 51, 0.35);
+  transform: translateY(-2px) scale(1.02);
+}
+
+.btn-sukuna-tech:active {
+  transform: scale(0.96);
+}
+
+/* Dismantle Button Spec */
+.btn-sukuna-tech.btn-dismantle {
+  border-color: rgba(255, 0, 51, 0.7);
+  box-shadow: 0 0 14px rgba(255, 0, 51, 0.35);
+}
+
+.btn-sukuna-tech.btn-dismantle:hover {
+  border-color: #ff0033;
+  box-shadow: 0 0 25px rgba(255, 0, 51, 0.95), inset 0 0 14px rgba(255, 255, 255, 0.25);
+}
+
+/* --------------------------------------------------------------------------
+   Le Em Circle Fast Typewriter Speech Chant Bubble ("Dismantle...")
+   -------------------------------------------------------------------------- */
+.sukuna-chant-bubble {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #070204 0%, #170408 100%);
+  border: 1.5px solid #ff0033;
+  border-radius: 8px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  z-index: 60;
+  pointer-events: none;
+  box-shadow: 0 0 18px rgba(255, 0, 51, 0.8), inset 0 0 10px rgba(0, 0, 0, 0.95);
+  animation: chantBubblePop 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.sukuna-chant-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 6px 6px 0 6px;
+  border-style: solid;
+  border-color: #ff0033 transparent transparent transparent;
+}
+
+.sukuna-chant-text {
+  font-family: 'Cinzel', 'Noto Serif JP', serif, monospace;
+  font-size: 0.88rem;
+  font-weight: 900;
+  color: #ffffff;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px #ff0033, 0 0 18px #ef4444;
+}
+
+.sukuna-chant-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.88em;
+  background: #ff0033;
+  margin-left: 2px;
+  vertical-align: middle;
+  box-shadow: 0 0 6px #ff0033;
+  animation: chantCaretBlink 0.25s infinite alternate;
+}
+
+@keyframes chantBubblePop {
+  0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.6); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+@keyframes chantCaretBlink {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* --------------------------------------------------------------------------
+   Dismantle Slash VFX on Targeted Player Circle (White & Dominant Black)
+   -------------------------------------------------------------------------- */
+.dismantle-slash-fx {
+  position: absolute;
+  inset: -30%;
+  width: 160%;
+  height: 160%;
+  pointer-events: none;
+  z-index: 55;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
+.dismantle-slash-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.slash-path-black,
+.slash-path-dark,
+.slash-path-white {
+  stroke-dasharray: 240;
+  stroke-dashoffset: 240;
+  animation: dismantleSlashDraw 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.s2 {
+  animation-delay: 0.07s;
+}
+
+.s3 {
+  animation-delay: 0.13s;
+}
+
+@keyframes dismantleSlashDraw {
+  0% { stroke-dashoffset: 240; opacity: 0; }
+  15% { opacity: 1; }
+  75% { stroke-dashoffset: 0; opacity: 1; }
+  100% { stroke-dashoffset: 0; opacity: 0.95; }
+}
+
+.slash-impact-flash {
+  position: absolute;
+  inset: 10%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffffff 0%, rgba(0, 0, 0, 0.95) 55%, transparent 75%);
+  opacity: 0;
+  animation: slashImpactBurst 0.4s ease-out forwards;
+}
+
+@keyframes slashImpactBurst {
+  0% { opacity: 0; transform: scale(0.2); }
+  25% { opacity: 1; transform: scale(1.35); }
+  100% { opacity: 0; transform: scale(1.7); }
+}
+
+.dismantle-sliced-marble {
+  animation: dismantleSliceRupture 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  filter: contrast(1.9) drop-shadow(0 0 16px #000000) drop-shadow(0 0 6px #ffffff) !important;
+}
+
+@keyframes dismantleSliceRupture {
+  0% { transform: scale(1); }
+  15% { transform: translate(-5px, 4px) scale(1.1) rotate(-5deg); }
+  30% { transform: translate(6px, -4px) scale(0.92) rotate(6deg); }
+  45% { transform: translate(-4px, -3px) scale(1.05) rotate(-3deg); }
+  60% { transform: translate(4px, 2px) scale(0.97); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+
+/* --------------------------------------------------------------------------
+   Sukuna Dismantle Target Selection Modal
+   -------------------------------------------------------------------------- */
+.sukuna-modal-card {
+  max-width: 440px;
+  background: linear-gradient(145deg, #0e0407 0%, #1a080d 50%, #0a0204 100%) !important;
+  border: 1.5px solid #ef4444 !important;
+  box-shadow: 0 0 40px rgba(239, 68, 68, 0.65), inset 0 0 25px rgba(0, 0, 0, 0.85) !important;
+  text-align: center;
+}
+
+.sukuna-modal-tag {
+  font-family: var(--font-heading);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: #ef4444;
+  margin-bottom: 0.35rem;
+  text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(239, 68, 68, 0.6);
+}
+
+.sukuna-modal-title {
+  font-family: var(--font-heading);
+  font-size: 1.65rem;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  color: #ffffff;
+  text-shadow: 0 0 15px rgba(255, 0, 51, 0.85);
+  margin-bottom: 0.35rem;
+}
+
+.sukuna-modal-title span {
+  font-family: 'Cinzel', 'Noto Serif JP', serif;
+  color: #ef4444;
+  font-size: 1.45rem;
+  margin-left: 0.35rem;
+}
+
+.sukuna-modal-desc {
+  font-size: 0.88rem;
+  color: #cbd5e1;
+  margin-bottom: 1.25rem;
+}
+
+.dismantle-targets-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 1.25rem;
+  padding: 0.25rem;
+}
+
+.dismantle-target-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1.2px solid rgba(239, 68, 68, 0.35);
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dismantle-target-btn:hover {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.6);
+  transform: translateX(4px);
+}
+
+.dismantle-target-btn:active {
+  transform: scale(0.98);
+}
+
+.dismantle-target-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.dismantle-target-marble {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  flex-shrink: 0;
+}
+
+.dismantle-target-name {
+  font-family: var(--font-heading);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.dismantle-target-coords {
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-left: 0.35rem;
+}
+
+.dismantle-strike-tag {
+  font-family: var(--font-heading);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ff3355;
+  background: rgba(255, 0, 51, 0.16);
+  border: 1px solid rgba(255, 0, 51, 0.45);
+  padding: 0.35rem 0.65rem;
+  border-radius: 8px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 600px) {
+  .sukuna-arsenal-bar {
+    gap: 0.5rem;
+  }
+  .btn-sukuna-tech {
+    padding: 0.55rem 1rem;
+    font-size: 0.78rem;
+  }
+  .btn-sukuna-tech .tech-kanji {
+    font-size: 1rem;
+  }
+}
+
+
