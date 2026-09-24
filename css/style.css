@@ -3141,17 +3141,18 @@ select.input-field option {
   filter: drop-shadow(0 0 30px rgba(255, 0, 51, 0.95)) drop-shadow(0 0 60px #000000) contrast(1.15);
 }
 
-/* 4. Ground shaking continuous earthquake for 10 seconds */
+/* 4. Ground shaking continuous earthquake for 10 seconds (GPU accelerated) */
 .domain-cataclysm-earthquake {
-  animation: domainEarthquakeRumble 0.08s infinite alternate !important;
+  animation: domainEarthquakeRumble 0.1s infinite alternate !important;
+  will-change: transform;
 }
 
 @keyframes domainEarthquakeRumble {
-  0% { transform: translate3d(-7px, 5px, 0) rotate(-0.7deg); }
-  25% { transform: translate3d(8px, -6px, 0) rotate(0.8deg); }
-  50% { transform: translate3d(-9px, -5px, 0) rotate(-0.6deg); }
-  75% { transform: translate3d(7px, 7px, 0) rotate(0.6deg); }
-  100% { transform: translate3d(-6px, -7px, 0) rotate(-0.5deg); }
+  0% { transform: translate3d(-5px, 3px, 0); }
+  25% { transform: translate3d(6px, -4px, 0); }
+  50% { transform: translate3d(-6px, -3px, 0); }
+  75% { transform: translate3d(5px, 5px, 0); }
+  100% { transform: translate3d(-4px, -5px, 0); }
 }
 
 /* 5. Fullscreen Omnipresent White, Red, and Black Slashes (Different Sizes) */
@@ -3170,6 +3171,7 @@ select.input-field option {
   justify-content: center;
   pointer-events: none;
   transform-origin: center center;
+  will-change: transform, opacity;
 }
 
 /* SIZES: Different sizes that take up the entire screen */
