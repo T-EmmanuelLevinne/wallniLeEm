@@ -134,6 +134,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalDismantleTarget = document.getElementById('modal-dismantle-target');
   const btnCancelDismantle = document.getElementById('btn-cancel-dismantle');
   const dismantleTargetsList = document.getElementById('dismantle-targets-list');
+
+  // Istaroth Mode & Time Stop (Dev 'Hart')
+  const btnIstarothMode = document.getElementById('btn-istaroth-mode');
+  let isIstarothButtonRevealed = false;
+  let isIstarothModeActive = false;
+  const istarothArsenalBar = document.getElementById('istaroth-arsenal-bar');
+  const btnIstarothTimeStop = document.getElementById('btn-istaroth-timestop');
+  const btnIstarothReverseTime = document.getElementById('btn-istaroth-reversetime');
+  const btnIstarothErasure = document.getElementById('btn-istaroth-erasure');
+  const modalTimeStopSelection = document.getElementById('modal-timestop-selection');
+  const timestopTargetsList = document.getElementById('timestop-targets-list');
+  const btnTimestopFreezeAll = document.getElementById('btn-timestop-freeze-all');
+  const btnTimestopResumeAll = document.getElementById('btn-timestop-resume-all');
+  const btnCloseTimeStop = document.getElementById('btn-close-timestop');
+
   const modalBurnConfirm = document.getElementById('modal-burn-confirm');
   const btnCancelBurn = document.getElementById('btn-cancel-burn');
   const btnConfirmBurn = document.getElementById('btn-confirm-burn');
@@ -307,8 +322,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --------------------------------------------------------------------------
-  // Developer Passcode Verification for 'Le Em' [DEV] (Passcode: 8119)
+  // Developer Passcode Verification for 'Le Em' (Passcode: 8119) & 'Hart' (Passcode: 8142)
   // --------------------------------------------------------------------------
+  function isDevName(nameStr) {
+    if (!nameStr) return false;
+    const n = nameStr.trim().toLowerCase();
+    return n === 'le em' || n === 'hart';
+  }
+
+  function getRequiredDevCode(nameStr) {
+    if (!nameStr) return null;
+    const n = nameStr.trim().toLowerCase();
+    if (n === 'le em') return '8119';
+    if (n === 'hart') return '8142';
+    return null;
+  }
+
   function isDeveloper(pOrName) {
     if (!pOrName) return false;
 
@@ -316,7 +345,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof pOrName === 'object') {
       if (pOrName.isDev) return true;
       if (pOrName.id === playerProfile.id && isDevVerified) return true;
-      if (pOrName.name && pOrName.name.trim().toLowerCase() === 'le em') {
+      if (pOrName.name && isDevName(pOrName.name)) {
         if (pOrName.id === playerProfile.id) return isDevVerified;
         if (roomState && Array.isArray(roomState.players)) {
           const match = roomState.players.find(pl => pl.id === pOrName.id);
@@ -327,20 +356,20 @@ document.addEventListener('DOMContentLoaded', () => {
       return false;
     }
 
-    // 2. If passed a name string (e.g. 'Le Em' or p.name)
+    // 2. If passed a name string (e.g. 'Le Em', 'Hart', or p.name)
     if (typeof pOrName === 'string') {
-      const isMatch = pOrName.trim().toLowerCase() === 'le em';
+      const isMatch = isDevName(pOrName);
       if (!isMatch) return false;
 
-      // Check if local player is verified Le Em
-      if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em' && isDevVerified) {
+      // Check if local player is verified dev with this name
+      if (playerProfile && playerProfile.name && isDevName(playerProfile.name) && isDevVerified) {
         return true;
       }
 
-      // Check if any player in the current room is verified Le Em
+      // Check if any player in the current room is verified dev with this name
       if (roomState && Array.isArray(roomState.players)) {
         const devInRoom = roomState.players.find(p =>
-          p.name && p.name.trim().toLowerCase() === 'le em' && (p.isDev || (p.id === playerProfile.id && isDevVerified))
+          p.name && p.name.trim().toLowerCase() === pOrName.trim().toLowerCase() && (p.isDev || (p.id === playerProfile.id && isDevVerified))
         );
         if (devInRoom) return true;
       }
@@ -362,6 +391,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function openDevPasscodeModal() {
     if (!modalDevPasscode) return;
+    const sub = modalDevPasscode.querySelector('.subtitle');
+    if (sub) {
+      sub.innerHTML = `Enter the security passcode to proceed as <strong>${escapeHTML(pendingDevName || 'Developer')} [DEV]</strong>`;
+    }
     modalDevPasscode.classList.add('active');
     if (devPasscodeInput) {
       devPasscodeInput.value = '';
@@ -378,14 +411,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function handleVerifyPasscode() {
     if (!devPasscodeInput) return;
     const entered = devPasscodeInput.value.trim();
-    if (entered === '8119') {
+    const targetName = pendingDevName || 'Le Em';
+    const requiredCode = getRequiredDevCode(targetName);
+
+    if (requiredCode && entered === requiredCode) {
       isDevVerified = true;
       playerProfile.isDev = true;
-      playerProfile.name = pendingDevName || 'Le Em';
+      playerProfile.name = targetName;
       inputPlayerName.value = playerProfile.name;
       updateDevTagPreview(playerProfile.name);
       closeDevPasscodeModal();
-      showToast('Developer verified! Welcome Le Em [DEV].', 'success');
+      showToast(`Developer verified! Welcome ${playerProfile.name} [DEV].`, 'success');
     } else {
       devPasscodeInput.classList.add('shake-anim');
       showToast('Incorrect developer passcode. Access denied.', 'error');
@@ -424,8 +460,8 @@ document.addEventListener('DOMContentLoaded', () => {
   inputPlayerName.addEventListener('input', (e) => {
     const raw = e.target.value;
     const trimmed = raw.trim();
-    if (trimmed.toLowerCase() === 'le em') {
-      if (!isDevVerified) {
+    if (isDevName(trimmed)) {
+      if (!isDevVerified || playerProfile.name.trim().toLowerCase() !== trimmed.toLowerCase()) {
         pendingDevName = trimmed;
         openDevPasscodeModal();
         return;
@@ -440,8 +476,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Profile Screen Actions
   document.getElementById('btn-nav-create').addEventListener('click', () => {
-    if (inputPlayerName.value.trim().toLowerCase() === 'le em' && !isDevVerified) {
-      pendingDevName = inputPlayerName.value.trim();
+    const trimmed = inputPlayerName.value.trim();
+    if (isDevName(trimmed) && (!isDevVerified || playerProfile.name.trim().toLowerCase() !== trimmed.toLowerCase())) {
+      pendingDevName = trimmed;
       openDevPasscodeModal();
       return;
     }
@@ -449,8 +486,9 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('btn-nav-join').addEventListener('click', () => {
-    if (inputPlayerName.value.trim().toLowerCase() === 'le em' && !isDevVerified) {
-      pendingDevName = inputPlayerName.value.trim();
+    const trimmed = inputPlayerName.value.trim();
+    if (isDevName(trimmed) && (!isDevVerified || playerProfile.name.trim().toLowerCase() !== trimmed.toLowerCase())) {
+      pendingDevName = trimmed;
       openDevPasscodeModal();
       return;
     }
@@ -888,6 +926,45 @@ document.addEventListener('DOMContentLoaded', () => {
       onSukunaDomain: (payload) => {
         performSukunaDomainSequence(payload.casterId, payload);
       },
+      onPlayerIstarothMode: (data) => {
+        const p = roomState.players.find(pl => pl.id === data.playerId);
+        if (p) {
+          p.isIstaroth = !!data.isIstaroth;
+          if (data.isIstaroth) {
+            p.istarothTransformedAt = Date.now();
+            playSynthesizedSound('celestial_ascend');
+          }
+          renderBoardState();
+        }
+      },
+      onIstarothTimeStopToggle: (payload) => {
+        const p = roomState.players.find(pl => pl.id === payload.targetId);
+        if (p) {
+          p.timeFrozen = !!payload.isFrozen;
+          if (payload.isFrozen) {
+            playSynthesizedSound('time_freeze');
+          } else {
+            playSynthesizedSound('time_resume');
+            if (p.pos) {
+              const cell = getCellElem(p.pos.r, p.pos.c);
+              if (cell) {
+                const shatter = document.createElement('div');
+                shatter.className = 'time-resume-shatter';
+                cell.appendChild(shatter);
+                setTimeout(() => shatter.remove(), 700);
+              }
+            }
+          }
+          renderBoardState();
+          if (modalTimeStopSelection && modalTimeStopSelection.classList.contains('active')) {
+            renderTimeStopTargetsList();
+          }
+        }
+      },
+      onIstarothTimeStopVFX: (payload) => {
+        triggerIstarothTimeStopVFX();
+        playAudio('audio/TimeStop.mp3', 1.0);
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
@@ -1213,6 +1290,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isSukunaModeActive && isLeEmPlayer() && sukunaArsenalBar) {
       sukunaArsenalBar.style.display = 'flex';
     }
+    if (isIstarothButtonRevealed && btnIstarothMode) {
+      btnIstarothMode.style.display = 'inline-flex';
+    }
+    if (isIstarothModeActive && isHartPlayer() && istarothArsenalBar) {
+      istarothArsenalBar.style.display = 'flex';
+    }
     saveActiveSession();
     renderBoardState();
     startTurnTimer();
@@ -1452,7 +1535,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (total <= 1) return 0;
     for (let step = 1; step <= total; step++) {
       const idx = (fromIndex + step) % total;
-      if (!roomState.players[idx].burnedOut) {
+      const p = roomState.players[idx];
+      if (p && !p.burnedOut && !p.timeFrozen) {
         return idx;
       }
     }
@@ -1519,6 +1603,45 @@ document.addEventListener('DOMContentLoaded', () => {
           marble.appendChild(tattooOverlay);
         }
 
+        // Task 3: Istaroth Mode & Twin Rotating Celestial Halos Check (Exclusive for Dev 'Hart')
+        const isHartDev = (p.name && p.name.trim().toLowerCase() === 'hart');
+        const isIstaroth = !!(p.isIstaroth || (p.id === playerProfile.id && isHartDev && isIstarothModeActive));
+        if (isIstaroth) {
+          marble.classList.add('istaroth-transformed');
+          const halosContainer = document.createElement('div');
+          halosContainer.className = 'istaroth-halos-container';
+          const isFreshTransform = (Date.now() - (p.istarothTransformedAt || 0) < 2400);
+          if (isFreshTransform) {
+            halosContainer.classList.add('istaroth-halo-dramatic-intro');
+            const burst = document.createElement('div');
+            burst.className = 'istaroth-ascension-burst';
+            marble.appendChild(burst);
+            setTimeout(() => burst.remove(), 1200);
+          }
+          halosContainer.innerHTML = getIstarothHalosSvg();
+          marble.appendChild(halosContainer);
+        }
+
+        // Time Stop Freeze Check
+        if (p.timeFrozen) {
+          marble.classList.add('time-frozen');
+          const sealOverlay = document.createElement('div');
+          sealOverlay.className = 'time-frozen-seal';
+          sealOverlay.innerHTML = `
+            <svg viewBox="0 0 36 36" class="frozen-clock-svg">
+              <circle cx="18" cy="18" r="15" fill="rgba(15, 23, 42, 0.45)" stroke="#38bdf8" stroke-width="1.8" stroke-dasharray="4 2"/>
+              <line x1="18" y1="18" x2="18" y2="8" stroke="#f0f9ff" stroke-width="2" stroke-linecap="round"/>
+              <line x1="18" y1="18" x2="24" y2="18" stroke="#f0f9ff" stroke-width="1.8" stroke-linecap="round"/>
+              <circle cx="18" cy="18" r="2.5" fill="#38bdf8"/>
+              <circle cx="18" cy="4" r="1.3" fill="#ffffff"/>
+              <circle cx="32" cy="18" r="1.3" fill="#ffffff"/>
+              <circle cx="18" cy="32" r="1.3" fill="#ffffff"/>
+              <circle cx="4" cy="18" r="1.3" fill="#ffffff"/>
+            </svg>
+          `;
+          marble.appendChild(sealOverlay);
+        }
+
         const isMe = (p.id === playerProfile.id);
         if (isMe) {
           if (isMyTurn) {
@@ -1530,6 +1653,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isMyTurn || playerProfile.burnedOut) return;
             setActionMode('MOVE');
             showMoveHighlights();
+          });
+        } else if (isHartPlayer() && (isIstarothModeActive || (modalTimeStopSelection && modalTimeStopSelection.classList.contains('active')))) {
+          // Dev Hart can also click directly on opponent marbles to toggle freeze time
+          marble.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePlayerTimeFreeze(p.id);
           });
         }
 
@@ -2071,7 +2200,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (e.key.toLowerCase() === 's') {
       if (isLeEmPlayer()) {
-        revealSukunaButton();
+        if (isSukunaButtonRevealed || isSukunaModeActive) {
+          hideSukunaMode();
+        } else {
+          revealSukunaButton();
+        }
+      }
+    } else if (e.key.toLowerCase() === 'i') {
+      if (isHartPlayer()) {
+        if (isIstarothButtonRevealed || isIstarothModeActive) {
+          hideIstarothMode();
+        } else {
+          revealIstarothButton();
+        }
       }
     } else if (e.key.toLowerCase() === 'r' || e.key.toLowerCase() === 'e') {
       toggleWallOrientation();
@@ -2136,7 +2277,13 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function advanceTurn(nextIndex) {
-    roomState.currentTurnIndex = nextIndex;
+    let targetIndex = nextIndex;
+    const targetPlayer = roomState.players[targetIndex];
+    if (targetPlayer && targetPlayer.timeFrozen) {
+      showToast(`Time is frozen for ${targetPlayer.name}! Turn skipped.`, 'info');
+      targetIndex = getNextActiveTurnIndex(targetIndex);
+    }
+    roomState.currentTurnIndex = targetIndex;
     lastHandledTimeoutTurn = -1;
     resetTurnTimer();
   }
@@ -2829,12 +2976,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function isLeEmPlayer() {
-    if (isDevVerified) return true;
-    if (playerProfile && playerProfile.isDev) return true;
-    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em') {
-      return true;
-    }
-    return false;
+    if (!playerProfile || !playerProfile.name) return false;
+    const name = playerProfile.name.trim().toLowerCase();
+    return name === 'le em' && (isDevVerified || playerProfile.isDev);
+  }
+
+  function isHartPlayer() {
+    if (!playerProfile || !playerProfile.name) return false;
+    const name = playerProfile.name.trim().toLowerCase();
+    return name === 'hart' && (isDevVerified || playerProfile.isDev);
   }
 
   function revealSukunaButton() {
@@ -2852,6 +3002,38 @@ document.addEventListener('DOMContentLoaded', () => {
       isSukunaButtonRevealed = true;
       showToast('Cursed energy stirred... Sukuna Mode unlocked!', 'success');
     }
+  }
+
+  function hideSukunaMode() {
+    isSukunaButtonRevealed = false;
+    isSukunaModeActive = false;
+    playerProfile.isSukuna = false;
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (meInRoom) {
+      meInRoom.isSukuna = false;
+    }
+
+    const btn = document.getElementById('btn-sukuna-mode');
+    if (btn) {
+      btn.style.display = 'none';
+      btn.classList.remove('active');
+      const textSpan = btn.querySelector('.sukuna-text');
+      if (textSpan) textSpan.textContent = 'SUKUNA MODE';
+    }
+
+    if (sukunaArsenalBar) {
+      sukunaArsenalBar.style.display = 'none';
+    }
+
+    broadcastEvent('player_sukuna_mode', {
+      playerId: playerProfile.id,
+      isSukuna: false
+    });
+
+    saveActiveSession();
+    renderBoardState();
+    showToast('Sukuna Mode deactivated.', 'neutral');
   }
 
   function handleSukunaModeToggle() {
@@ -3658,7 +3840,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const caster = roomState.players.find(p => p.id === casterId);
     const casterName = caster ? caster.name : 'Le Em';
 
-    showToast('Domain Expansion: Malevolent Shrine consumed all opponents!', 'error');
+    showToast('Domain Expansion: Malevolent', 'error');
 
     // Authoritative broadcast from caster to sync all peers and end game
     if (isMeCaster) {
@@ -3711,7 +3893,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (isMe) playerProfile.isSpectating = false;
 
       const winner = roomState.players.find(p => p.id !== target.id);
-      showToast(`${target.name} was defeated by ${techniqueName}!`, 'error');
+      showToast(`${target.name} was defeated by ${techniqueName}`, 'error');
 
       // Authoritative broadcast fallback from caster to sync all peers and end game
       if (playerProfile.id === casterId) {
@@ -3786,6 +3968,459 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnCancelDismantle) {
     btnCancelDismantle.addEventListener('click', () => {
       if (modalDismantleTarget) modalDismantleTarget.classList.remove('active');
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // Istaroth Mode & Chronos Authority System (Exclusive for Developer 'Hart')
+  // --------------------------------------------------------------------------
+  function playSynthesizedSound(type) {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!window._gameAudioCtx) window._gameAudioCtx = new AudioCtx();
+      const ctx = window._gameAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+
+      const now = ctx.currentTime;
+      if (type === 'celestial_ascend') {
+        [523.25, 659.25, 783.99, 1046.50, 1318.51].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, now + i * 0.07);
+          gain.gain.setValueAtTime(0, now + i * 0.07);
+          gain.gain.linearRampToValueAtTime(0.09, now + i * 0.07 + 0.04);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.07 + 1.2);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + i * 0.07);
+          osc.stop(now + i * 0.07 + 1.3);
+        });
+      } else if (type === 'time_freeze') {
+        [880, 1174.66, 1760].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + i * 0.02);
+          gain.gain.setValueAtTime(0.12, now + i * 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.02 + 0.45);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + i * 0.02);
+          osc.stop(now + i * 0.02 + 0.5);
+        });
+      } else if (type === 'time_resume') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.exponentialRampToValueAtTime(1320, now + 0.35);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(now);
+        osc.stop(now + 0.45);
+      }
+    } catch (e) {
+      console.warn('Audio synthesis warning:', e);
+    }
+  }
+
+  function revealIstarothButton() {
+    const btn = document.getElementById('btn-istaroth-mode');
+    if (!btn) return;
+
+    btn.style.display = 'inline-flex';
+    btn.classList.add('sukuna-unlocked-pop');
+    setTimeout(() => btn.classList.remove('sukuna-unlocked-pop'), 800);
+
+    isIstarothButtonRevealed = true;
+    isIstarothModeActive = true;
+    playerProfile.isIstaroth = true;
+    playerProfile.istarothTransformedAt = Date.now();
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (meInRoom) {
+      meInRoom.isIstaroth = true;
+      meInRoom.istarothTransformedAt = Date.now();
+    }
+
+    btn.classList.add('active');
+    if (istarothArsenalBar) {
+      istarothArsenalBar.style.display = 'flex';
+    }
+
+    playSynthesizedSound('celestial_ascend');
+
+    broadcastEvent('player_istaroth_mode', {
+      playerId: playerProfile.id,
+      isIstaroth: true
+    });
+
+    saveActiveSession();
+    renderBoardState();
+    showToast('The Authority of Time stirred... Istaroth Mode unlocked!', 'success');
+  }
+
+  function hideIstarothMode() {
+    isIstarothButtonRevealed = false;
+    isIstarothModeActive = false;
+    playerProfile.isIstaroth = false;
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (meInRoom) {
+      meInRoom.isIstaroth = false;
+    }
+
+    const btn = document.getElementById('btn-istaroth-mode');
+    if (btn) {
+      btn.style.display = 'none';
+      btn.classList.remove('active');
+    }
+
+    if (istarothArsenalBar) {
+      istarothArsenalBar.style.display = 'none';
+    }
+
+    closeTimeStopSelectionModal();
+
+    broadcastEvent('player_istaroth_mode', {
+      playerId: playerProfile.id,
+      isIstaroth: false
+    });
+
+    saveActiveSession();
+    renderBoardState();
+    showToast('Istaroth Mode deactivated.', 'neutral');
+  }
+
+  function handleIstarothModeToggle() {
+    if (!isHartPlayer()) return;
+
+    isIstarothModeActive = !isIstarothModeActive;
+    playerProfile.isIstaroth = isIstarothModeActive;
+    if (isIstarothModeActive) {
+      playerProfile.istarothTransformedAt = Date.now();
+    }
+
+    const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
+    if (meInRoom) {
+      meInRoom.isIstaroth = isIstarothModeActive;
+      if (isIstarothModeActive) {
+        meInRoom.istarothTransformedAt = Date.now();
+      }
+    }
+
+    const btn = document.getElementById('btn-istaroth-mode');
+    if (btn) {
+      if (isIstarothModeActive) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    }
+
+    if (istarothArsenalBar) {
+      istarothArsenalBar.style.display = isIstarothModeActive ? 'flex' : 'none';
+    }
+
+    if (isIstarothModeActive) {
+      playSynthesizedSound('celestial_ascend');
+    } else {
+      closeTimeStopSelectionModal();
+    }
+
+    broadcastEvent('player_istaroth_mode', {
+      playerId: playerProfile.id,
+      isIstaroth: isIstarothModeActive
+    });
+
+    saveActiveSession();
+    renderBoardState();
+  }
+
+  function getIstarothHalosSvg() {
+    return `
+      <svg class="istaroth-halos-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="istarothGoldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#fffbeb" />
+            <stop offset="35%" stop-color="#fde047" />
+            <stop offset="70%" stop-color="#fbbf24" />
+            <stop offset="100%" stop-color="#f59e0b" />
+          </linearGradient>
+          <linearGradient id="istarothCyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#e0f2fe" />
+            <stop offset="50%" stop-color="#38bdf8" />
+            <stop offset="100%" stop-color="#0284c7" />
+          </linearGradient>
+          <filter id="istarothHaloGlow" x="-25%" y="-25%" width="150%" height="150%">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+          </filter>
+        </defs>
+
+        <!-- 1. OUTER CELESTIAL HALO RING (Clockwise Rotation) -->
+        <g class="istaroth-halo-outer" filter="url(#istarothHaloGlow)">
+          <circle cx="50" cy="50" r="44" fill="none" stroke="url(#istarothGoldGrad)" stroke-width="2.5" stroke-dasharray="10 3 2 3" />
+          <circle cx="50" cy="50" r="41" fill="none" stroke="rgba(251, 191, 36, 0.45)" stroke-width="1" />
+
+          <!-- 4 Cardinal Solar Spikes / Sundial Needles -->
+          <polygon points="50,2 53,10 50,13 47,10" fill="#fde047" />
+          <polygon points="50,98 53,90 50,87 47,90" fill="#fde047" />
+          <polygon points="2,50 10,47 13,50 10,53" fill="#fde047" />
+          <polygon points="98,50 90,47 87,50 90,53" fill="#fde047" />
+
+          <!-- 4 Diagonal Celestial Star Notches -->
+          <polygon points="17,17 21,15 23,19 19,21" fill="#38bdf8" />
+          <polygon points="83,17 85,21 81,23 79,19" fill="#38bdf8" />
+          <polygon points="17,83 19,79 23,81 21,85" fill="#38bdf8" />
+          <polygon points="83,83 79,81 81,77 85,79" fill="#38bdf8" />
+        </g>
+
+        <!-- 2. INNER CELESTIAL CHRONOS RING (Counter-Clockwise Altered Rotation) -->
+        <g class="istaroth-halo-inner" filter="url(#istarothHaloGlow)">
+          <circle cx="50" cy="50" r="28" fill="none" stroke="url(#istarothCyanGrad)" stroke-width="2" stroke-dasharray="16 5 3 5" />
+          <circle cx="50" cy="50" r="25" fill="none" stroke="rgba(56, 189, 248, 0.35)" stroke-width="0.8" />
+
+          <!-- 4 Cardinal Hour Ticks -->
+          <line x1="50" y1="21" x2="50" y2="28" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="50" y1="72" x2="50" y2="79" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="21" y1="50" x2="28" y2="50" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+          <line x1="72" y1="50" x2="79" y2="50" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+
+          <!-- Central Mini Chronos Core Star -->
+          <circle cx="50" cy="50" r="7" fill="none" stroke="#fef08a" stroke-width="1.2" stroke-dasharray="3 2" />
+          <circle cx="50" cy="50" r="2.5" fill="#fde047" />
+        </g>
+      </svg>
+    `;
+  }
+
+  function triggerIstarothTimeStopVFX() {
+    const existing = document.querySelector('.istaroth-timestop-vfx-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'istaroth-timestop-vfx-overlay';
+    overlay.innerHTML = `
+      <div class="istaroth-timestop-flash"></div>
+      <div class="istaroth-timestop-shockwave"></div>
+      <div class="istaroth-timestop-dial">
+        <svg viewBox="0 0 200 200" style="width: 100%; height: 100%; filter: drop-shadow(0 0 16px #38bdf8);">
+          <circle cx="100" cy="100" r="92" fill="none" stroke="#fbbf24" stroke-width="3" stroke-dasharray="12 4 2 4" />
+          <circle cx="100" cy="100" r="84" fill="rgba(3, 7, 18, 0.65)" stroke="#38bdf8" stroke-width="2" />
+          
+          <!-- Roman Numerals Clock Marks -->
+          <text x="100" y="32" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="16">XII</text>
+          <text x="168" y="106" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="16">III</text>
+          <text x="100" y="178" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="16">VI</text>
+          <text x="32" y="106" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="16">IX</text>
+          
+          <!-- 12 Hour Ticks -->
+          ${Array.from({ length: 12 }).map((_, i) => {
+            const angle = (i * 30) * Math.PI / 180;
+            const x1 = 100 + 74 * Math.sin(angle);
+            const y1 = 100 - 74 * Math.cos(angle);
+            const x2 = 100 + 82 * Math.sin(angle);
+            const y2 = 100 - 82 * Math.cos(angle);
+            return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>`;
+          }).join('')}
+
+          <!-- Frozen Clock Hands -->
+          <line x1="100" y1="100" x2="100" y2="46" stroke="#fde047" stroke-width="4.5" stroke-linecap="round"/>
+          <line x1="100" y1="100" x2="142" y2="100" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="100" cy="100" r="7" fill="#fbbf24" stroke="#ffffff" stroke-width="2"/>
+        </svg>
+      </div>
+      <div class="istaroth-timestop-banner">
+        <div class="istaroth-banner-title">TIME STOP</div>
+        <div class="istaroth-banner-sub">The Authority of Istaroth halts the flowing stream</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('sukuna-screen-shake');
+    setTimeout(() => gameScreen.classList.remove('sukuna-screen-shake'), 600);
+
+    setTimeout(() => {
+      overlay.remove();
+    }, 2200);
+  }
+
+  function openTimeStopSelectionModal() {
+    if (!modalTimeStopSelection) return;
+    renderTimeStopTargetsList();
+    modalTimeStopSelection.classList.add('active');
+  }
+
+  function closeTimeStopSelectionModal() {
+    if (!modalTimeStopSelection) return;
+    modalTimeStopSelection.classList.remove('active');
+  }
+
+  function renderTimeStopTargetsList() {
+    if (!timestopTargetsList) return;
+    timestopTargetsList.innerHTML = '';
+
+    const otherPlayers = roomState.players.filter(p => p.id !== playerProfile.id);
+    if (otherPlayers.length === 0) {
+      timestopTargetsList.innerHTML = `
+        <div style="color: #94a3b8; font-size: 0.88rem; padding: 1rem;">
+          No opponent players currently in the room to freeze.
+        </div>
+      `;
+      return;
+    }
+
+    otherPlayers.forEach(p => {
+      const isFrozen = !!p.timeFrozen;
+      const card = document.createElement('div');
+      card.className = `timestop-target-card ${isFrozen ? 'is-frozen' : ''}`;
+      
+      const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+      const statusClass = isFrozen ? 'status-frozen' : 'status-flowing';
+      const statusText = isFrozen ? 'TIME FROZEN' : 'FLOWING';
+      const btnClass = isFrozen ? 'action-resume' : 'action-freeze';
+      const btnText = isFrozen ? 'Resume Time' : 'Freeze Turn';
+
+      card.innerHTML = `
+        <div class="timestop-target-info">
+          <div class="timestop-target-dot" style="background: ${p.hex || '#38bdf8'};"></div>
+          <div>
+            <div class="timestop-target-name">${escapeHTML(p.name || 'Player')} ${devBadge}</div>
+            <div style="display: flex; gap: 0.4rem; align-items: center; margin-top: 0.2rem;">
+              <span class="time-status-badge ${statusClass}">${statusText}</span>
+              ${p.burnedOut ? '<span style="font-size: 0.65rem; color: #ef4444; font-weight: 700;">(BURNED OUT)</span>' : ''}
+            </div>
+          </div>
+        </div>
+        <button type="button" class="btn-toggle-freeze ${btnClass}">${btnText}</button>
+      `;
+
+      const btnToggle = card.querySelector('.btn-toggle-freeze');
+      btnToggle.addEventListener('click', (e) => {
+        e.stopPropagation();
+        togglePlayerTimeFreeze(p.id);
+      });
+
+      timestopTargetsList.appendChild(card);
+    });
+  }
+
+  function togglePlayerTimeFreeze(targetId, forceFrozen = null) {
+    const targetPlayer = roomState.players.find(p => p.id === targetId);
+    if (!targetPlayer) return;
+
+    const newFreezeState = (forceFrozen !== null) ? forceFrozen : !targetPlayer.timeFrozen;
+    targetPlayer.timeFrozen = newFreezeState;
+
+    if (newFreezeState) {
+      playSynthesizedSound('time_freeze');
+      showToast(`Time has been FROZEN for ${targetPlayer.name}! Turn will be skipped.`, 'info');
+
+      // If it is currently this player's turn, immediately advance to the next unfrozen player
+      if (roomState.currentTurnIndex < roomState.players.length &&
+          roomState.players[roomState.currentTurnIndex].id === targetPlayer.id) {
+        const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+        advanceTurn(nextIndex);
+        broadcastEvent('turn_timeout', {
+          playerId: targetPlayer.id,
+          nextTurnIndex: nextIndex
+        });
+      }
+    } else {
+      playSynthesizedSound('time_resume');
+      showToast(`Time restored for ${targetPlayer.name}.`, 'success');
+
+      // Add temporary shatter ripple on their cell
+      if (targetPlayer.pos) {
+        const cell = getCellElem(targetPlayer.pos.r, targetPlayer.pos.c);
+        if (cell) {
+          const shatter = document.createElement('div');
+          shatter.className = 'time-resume-shatter';
+          cell.appendChild(shatter);
+          setTimeout(() => shatter.remove(), 700);
+        }
+      }
+    }
+
+    // Broadcast state to all peers
+    broadcastEvent('istaroth_timestop_toggle', {
+      targetId: targetPlayer.id,
+      isFrozen: targetPlayer.timeFrozen,
+      casterId: playerProfile.id
+    });
+
+    saveActiveSession();
+    renderBoardState();
+    renderTimeStopTargetsList();
+  }
+
+  if (btnIstarothMode) {
+    btnIstarothMode.addEventListener('click', () => {
+      handleIstarothModeToggle();
+    });
+  }
+
+  if (btnIstarothTimeStop) {
+    btnIstarothTimeStop.addEventListener('click', () => {
+      if (!isHartPlayer() || !isIstarothModeActive) return;
+
+      // 1. Play audio TimeStop.mp3 instantly at volume 1.0
+      playAudio('audio/TimeStop.mp3', 1.0);
+
+      // 2. Trigger dramatic Genshin Impact / Istaroth time-stop screen VFX
+      triggerIstarothTimeStopVFX();
+
+      // 3. Open interactive target selection panel to freeze/unfreeze any player
+      openTimeStopSelectionModal();
+
+      // 4. Broadcast VFX to room peers
+      broadcastEvent('istaroth_timestop_vfx', {
+        casterId: playerProfile.id
+      });
+    });
+  }
+
+  if (btnIstarothReverseTime) {
+    btnIstarothReverseTime.addEventListener('click', () => {
+      showToast('Reverse Time is currently sealed. Awaiting instructions.', 'neutral');
+    });
+  }
+
+  if (btnIstarothErasure) {
+    btnIstarothErasure.addEventListener('click', () => {
+      showToast('Rewritten Timeline: The Erasure is currently sealed. Awaiting instructions.', 'neutral');
+    });
+  }
+
+  if (btnTimestopFreezeAll) {
+    btnTimestopFreezeAll.addEventListener('click', () => {
+      const otherPlayers = roomState.players.filter(p => p.id !== playerProfile.id);
+      otherPlayers.forEach(p => {
+        togglePlayerTimeFreeze(p.id, true);
+      });
+      showToast('All opponents frozen in time!', 'info');
+    });
+  }
+
+  if (btnTimestopResumeAll) {
+    btnTimestopResumeAll.addEventListener('click', () => {
+      const otherPlayers = roomState.players.filter(p => p.id !== playerProfile.id);
+      otherPlayers.forEach(p => {
+        togglePlayerTimeFreeze(p.id, false);
+      });
+      showToast('Time restored for all players.', 'success');
+    });
+  }
+
+  if (btnCloseTimeStop) {
+    btnCloseTimeStop.addEventListener('click', () => {
+      closeTimeStopSelectionModal();
     });
   }
 

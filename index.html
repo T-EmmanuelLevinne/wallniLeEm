@@ -9,7 +9,7 @@
     content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
 
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=2.8">
+  <link rel="stylesheet" href="css/style.css?v=2.9">
 
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -224,6 +224,15 @@
               <span class="sukuna-kanji">宿儺</span>
               <span class="sukuna-text">SUKUNA MODE</span>
             </button>
+            <button id="btn-istaroth-mode" class="btn-istaroth-mode" style="display: none;" title="Unleash Istaroth - God of Time">
+              <div class="istaroth-aura-celestial">
+                <span class="istaroth-spark c1"></span>
+                <span class="istaroth-spark c2"></span>
+                <span class="istaroth-spark c3"></span>
+              </div>
+              <span class="istaroth-glyph">ᛟ</span>
+              <span class="istaroth-text">ISTAROTH</span>
+            </button>
           </div>
 
           <!-- Sukuna Arsenal Abilities Bar (Dismantle, Cleave, Domain Expansion) -->
@@ -239,6 +248,30 @@
             <button id="btn-sukuna-domain" class="btn-sukuna-tech btn-domain" title="Domain Expansion: Malevolent Shrine">
               <span class="tech-kanji">伏魔御廚子</span>
               <span class="tech-label">Domain Expansion: Malevolent Shrine</span>
+            </button>
+          </div>
+
+          <!-- Istaroth Celestial Arsenal Bar (Time Stop, Reverse Time, Rewritten Timeline: The Erasure) -->
+          <div id="istaroth-arsenal-bar" class="istaroth-arsenal-bar" style="display: none;">
+            <button id="btn-istaroth-timestop" class="btn-istaroth-tech btn-timestop" title="Time Stop: Freeze players' turns">
+              <svg class="istaroth-tech-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span class="tech-label">Time Stop</span>
+            </button>
+            <button id="btn-istaroth-reversetime" class="btn-istaroth-tech btn-reversetime is-locked" title="Reverse Time (Awaiting orders)" disabled>
+              <svg class="istaroth-tech-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                <path d="M3 3v5h5"></path>
+              </svg>
+              <span class="tech-label">Reverse Time</span>
+            </button>
+            <button id="btn-istaroth-erasure" class="btn-istaroth-tech btn-erasure is-locked" title="Rewritten Timeline: The Erasure (Awaiting orders)" disabled>
+              <svg class="istaroth-tech-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"></path>
+              </svg>
+              <span class="tech-label">Rewritten Timeline: The Erasure</span>
             </button>
           </div>
 
@@ -311,6 +344,30 @@
   </div>
 
   <!-- =========================================================================
+       ISTAROTH TIME STOP PLAYER SELECTION MODAL
+       ========================================================================= -->
+  <div id="modal-timestop-selection" class="modal-overlay">
+    <div class="glass-card istaroth-modal-card">
+      <div class="istaroth-modal-tag">CHRONOS AUTHORITY</div>
+      <h2 class="istaroth-modal-title">TIME STOP <span>「 時の支配者 」</span></h2>
+      <p class="istaroth-modal-desc">Freeze or unfreeze the flow of time for any player. Multiple targets can be frozen at will.</p>
+      
+      <div id="timestop-targets-list" class="timestop-targets-list">
+        <!-- Populated dynamically via JS with interactive player freeze toggle cards -->
+      </div>
+
+      <div class="istaroth-quick-row">
+        <button id="btn-timestop-freeze-all" class="btn-istaroth-pill" type="button">Freeze All Opponents</button>
+        <button id="btn-timestop-resume-all" class="btn-istaroth-pill" type="button">Resume All</button>
+      </div>
+
+      <div class="istaroth-modal-actions">
+        <button id="btn-close-timestop" class="btn-primary" type="button" style="background: linear-gradient(135deg, #0284c7, #38bdf8); width: 100%;">Confirm Flow</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
        VICTORY MODAL & CONFETTI OVERLAY
        ========================================================================= -->
   <div id="modal-victory" class="modal-overlay">
@@ -339,9 +396,9 @@
   <canvas id="confetti-canvas"></canvas>
 
   <!-- JS Game Engines -->
-  <script src="js/supabase-config.js?v=2.8"></script>
-  <script src="js/pathfinding.js?v=2.8"></script>
-  <script src="js/game.js?v=2.8"></script>
+  <script src="js/supabase-config.js?v=2.9"></script>
+  <script src="js/pathfinding.js?v=2.9"></script>
+  <script src="js/game.js?v=2.9"></script>
 </body>
 
 </html>

@@ -99,6 +99,15 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'sukuna_domain' }, ({ payload }) => {
       if (callbacks.onSukunaDomain) callbacks.onSukunaDomain(payload);
     })
+    .on('broadcast', { event: 'player_istaroth_mode' }, ({ payload }) => {
+      if (callbacks.onPlayerIstarothMode) callbacks.onPlayerIstarothMode(payload);
+    })
+    .on('broadcast', { event: 'istaroth_timestop_toggle' }, ({ payload }) => {
+      if (callbacks.onIstarothTimeStopToggle) callbacks.onIstarothTimeStopToggle(payload);
+    })
+    .on('broadcast', { event: 'istaroth_timestop_vfx' }, ({ payload }) => {
+      if (callbacks.onIstarothTimeStopVFX) callbacks.onIstarothTimeStopVFX(payload);
+    })
     .on('broadcast', { event: 'room_reconnect_query' }, ({ payload }) => {
       if (callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
     })
@@ -154,6 +163,9 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'sukuna_dismantle' && callbacks.onSukunaDismantle) callbacks.onSukunaDismantle(payload);
     if (type === 'sukuna_cleave' && callbacks.onSukunaCleave) callbacks.onSukunaCleave(payload);
     if (type === 'sukuna_domain' && callbacks.onSukunaDomain) callbacks.onSukunaDomain(payload);
+    if (type === 'player_istaroth_mode' && callbacks.onPlayerIstarothMode) callbacks.onPlayerIstarothMode(payload);
+    if (type === 'istaroth_timestop_toggle' && callbacks.onIstarothTimeStopToggle) callbacks.onIstarothTimeStopToggle(payload);
+    if (type === 'istaroth_timestop_vfx' && callbacks.onIstarothTimeStopVFX) callbacks.onIstarothTimeStopVFX(payload);
     if (type === 'room_reconnect_query' && callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
   };
 
