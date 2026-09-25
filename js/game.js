@@ -1074,6 +1074,16 @@ document.addEventListener('DOMContentLoaded', () => {
             renderTimeStopTargetsList();
           }
         }
+        if (payload && payload.currentTurnIndex !== undefined) {
+          roomState.currentTurnIndex = payload.currentTurnIndex;
+        }
+        if (payload && (payload.allFrozen || areAllOpponentsFrozen())) {
+          stopTurnTimer();
+          updateTimerBadgeUI(Infinity);
+        } else {
+          startTurnTimer();
+        }
+        renderBoardState();
       },
       onIstarothTimeStopVFX: (payload) => {
         triggerIstarothTimeStopVFX();
@@ -1623,16 +1633,25 @@ document.addEventListener('DOMContentLoaded', () => {
     clearMoveHighlights();
     if (playerProfile.burnedOut) return;
 
+    const canHartRunFreely = isHartPlayer() && areAllOpponentsFrozen();
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id || !activePlayer.pos || activePlayer.burnedOut) {
+    const isMyTurn = (activePlayer && activePlayer.id === playerProfile.id && !playerProfile.burnedOut);
+
+    if (!isMyTurn && !canHartRunFreely) {
       return;
     }
 
-    const validMoves = getValidMovesForPlayer(activePlayer, roomState);
+    const playerToHighlight = (activePlayer && activePlayer.id === playerProfile.id) ? activePlayer : (roomState.players.find(p => p.id === playerProfile.id));
+    if (!playerToHighlight || !playerToHighlight.pos) return;
+
+    const validMoves = getValidMovesForPlayer(playerToHighlight, roomState);
     validMoves.forEach(m => {
       const cell = getCellElem(m.r, m.c);
       if (cell) {
         cell.classList.add('highlighted-move');
+        if (canHartRunFreely) {
+          cell.classList.add('timestop-freerun-cell');
+        }
         if (m.type === 'JUMP' || m.type === 'DIAG_JUMP') {
           cell.classList.add('jump-move');
         }
@@ -1754,14 +1773,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const isMe = (p.id === playerProfile.id);
+        const canHartRunFreely = isHartPlayer() && areAllOpponentsFrozen();
         if (isMe) {
-          if (isMyTurn) {
+          if (isMyTurn || canHartRunFreely) {
             marble.classList.add('selected-player');
           }
           // Clicking the player's circle directly activates Move mode and highlights reachable squares in blue
           marble.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!isMyTurn || playerProfile.burnedOut) return;
+            if ((!isMyTurn && !canHartRunFreely) || playerProfile.burnedOut) return;
             setActionMode('MOVE');
             showMoveHighlights();
           });
@@ -1826,7 +1846,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderGamePlayersList();
     updateBurnOutButtonUI();
 
-    if (isMyTurn && currentActionMode === 'MOVE' && !playerProfile.burnedOut) {
+    const canHartRunFreelyState = isHartPlayer() && areAllOpponentsFrozen();
+    if ((isMyTurn || canHartRunFreelyState) && currentActionMode === 'MOVE' && !playerProfile.burnedOut) {
       showMoveHighlights();
     } else {
       clearMoveHighlights();
@@ -1910,31 +1931,94 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const canHartRunFreely = isHartPlayer() && areAllOpponentsFrozen();
     const isMe = (activePlayer.id === playerProfile.id);
     const devBadge = getPlayerBadgeHTML(activePlayer);
     const teamTag = (roomState.gameMode === 'team' && activePlayer.teamName) ? ` <span style="opacity:0.85; font-size:0.85em;">(${escapeHTML(activePlayer.teamName)})</span>` : '';
 
-    if (isMe) {
+    if (canHartRunFreely) {
+      turnLabel.innerHTML = `TIME STOPPED - RUN FREELY! <span class="badge-dev badge-time">TIME</span>`;
+      turnDot.className = `turn-dot turn-pulse marble-blue`;
+    } else if (areAllOpponentsFrozen()) {
+      turnLabel.innerHTML = `TIME STOPPED - ALL PLAYERS FROZEN`;
+      turnDot.className = `turn-dot marble-blue`;
+    } else if (isMe) {
       turnLabel.innerHTML = `Your Turn!${devBadge}${teamTag}`;
+      turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
     } else {
       turnLabel.innerHTML = `${escapeHTML(activePlayer.name)}${devBadge}'s Turn${teamTag}`;
+      turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
     }
-    turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
   }
 
   // --------------------------------------------------------------------------
   // Action Handlers
   // --------------------------------------------------------------------------
+  let isExecutingFreeRun = false;
+
+  async function executeHartMultiStepRun(playerToMove, path) {
+    if (!path || path.length === 0 || isExecutingFreeRun) return;
+    isExecutingFreeRun = true;
+    clearMoveHighlights();
+
+    const hartIndex = roomState.players.findIndex(p => p.id === playerProfile.id);
+
+    for (let i = 0; i < path.length; i++) {
+      const step = path[i];
+      const fromPos = { r: playerToMove.pos.r, c: playerToMove.pos.c };
+
+      lastMoveAnimation = {
+        playerId: playerToMove.id,
+        from: fromPos,
+        to: { r: step.r, c: step.c },
+        isJump: false,
+        color: playerToMove.color
+      };
+
+      playerToMove.pos = { r: step.r, c: step.c };
+
+      broadcastEvent('player_move', {
+        playerId: playerProfile.id,
+        pos: { r: step.r, c: step.c },
+        from: fromPos,
+        isJump: false,
+        nextTurnIndex: (hartIndex !== -1) ? hartIndex : 0
+      });
+
+      renderBoardState();
+
+      if (step.r === GOAL_POS.r && step.c === GOAL_POS.c) {
+        triggerVictory(playerToMove);
+        isExecutingFreeRun = false;
+        return;
+      }
+
+      await new Promise(res => setTimeout(res, 120));
+    }
+
+    isExecutingFreeRun = false;
+    advanceTurn(hartIndex !== -1 ? hartIndex : 0);
+    saveActiveSession();
+    renderBoardState();
+  }
+
   function handleCellClick(r, c) {
-    if (playerProfile.burnedOut) return;
+    if (playerProfile.burnedOut || isExecutingFreeRun) return;
+
+    const canHartRunFreely = isHartPlayer() && areAllOpponentsFrozen();
     const activePlayer = roomState.players[roomState.currentTurnIndex];
-    if (!activePlayer || activePlayer.id !== playerProfile.id || activePlayer.burnedOut) {
+    const isMyTurn = (activePlayer && activePlayer.id === playerProfile.id && !playerProfile.burnedOut);
+
+    if (!isMyTurn && !canHartRunFreely) {
       return;
     }
 
+    const playerToMove = isMyTurn ? activePlayer : roomState.players.find(p => p.id === playerProfile.id);
+    if (!playerToMove || !playerToMove.pos) return;
+
     // MODE 1: Move Marble
     if (currentActionMode === 'MOVE') {
-      const validMoves = getValidMovesForPlayer(activePlayer, roomState);
+      const validMoves = getValidMovesForPlayer(playerToMove, roomState);
 
       // Check if clicking directly on a valid landing tile
       let targetMove = validMoves.find(m => m.r === r && m.c === c);
@@ -1953,23 +2037,24 @@ document.addEventListener('DOMContentLoaded', () => {
       if (targetMove) {
         const destR = targetMove.r;
         const destC = targetMove.c;
-        const fromPos = activePlayer.pos ? { r: activePlayer.pos.r, c: activePlayer.pos.c } : null;
+        const fromPos = playerToMove.pos ? { r: playerToMove.pos.r, c: playerToMove.pos.c } : null;
         const isJump = (targetMove.type === 'JUMP') || (fromPos && (Math.abs(destR - fromPos.r) > 1 || Math.abs(destC - fromPos.c) > 1));
 
         if (fromPos) {
           lastMoveAnimation = {
-            playerId: activePlayer.id,
+            playerId: playerToMove.id,
             from: fromPos,
             to: { r: destR, c: destC },
             isJump: isJump,
-            color: activePlayer.color
+            color: playerToMove.color
           };
         }
 
-        activePlayer.pos = { r: destR, c: destC };
+        playerToMove.pos = { r: destR, c: destC };
         clearMoveHighlights();
 
-        const nextTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+        const hartIndex = roomState.players.findIndex(p => p.id === playerProfile.id);
+        const nextTurnIndex = canHartRunFreely ? (hartIndex !== -1 ? hartIndex : 0) : getNextActiveTurnIndex(roomState.currentTurnIndex);
 
         broadcastEvent('player_move', {
           playerId: playerProfile.id,
@@ -1984,10 +2069,19 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBoardState();
 
         if (destR === GOAL_POS.r && destC === GOAL_POS.c) {
-          triggerVictory(activePlayer);
+          triggerVictory(playerToMove);
+        }
+      } else if (canHartRunFreely) {
+        // Multi-tile Free Run: Hart can click any destination tile connected by an unblocked path when all players are frozen!
+        const path = findPathBetween(playerToMove.pos, { r, c }, roomState.walls, GRID_SIZE);
+        if (path && path.length > 0) {
+          executeHartMultiStepRun(playerToMove, path);
+          return;
+        } else {
+          showToast('Cannot run there: path is blocked by walls!', 'warning');
         }
       } else {
-        const currPos = activePlayer.pos;
+        const currPos = playerToMove.pos;
         const dr = Math.abs(r - currPos.r);
         const dc = Math.abs(c - currPos.c);
         const isAdjacent = (dr === 1 && dc === 0) || (dr === 0 && dc === 1);
@@ -2388,6 +2482,14 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function advanceTurn(nextIndex) {
+    if (areAllOpponentsFrozen() && isHartPlayer()) {
+      const hartIndex = roomState.players.findIndex(p => p.id === playerProfile.id);
+      roomState.currentTurnIndex = (hartIndex !== -1) ? hartIndex : nextIndex;
+      stopTurnTimer();
+      updateTimerBadgeUI(Infinity);
+      return;
+    }
+
     let targetIndex = nextIndex;
     const targetPlayer = roomState.players[targetIndex];
     if (targetPlayer && targetPlayer.timeFrozen) {
@@ -2404,6 +2506,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // --------------------------------------------------------------------------
   function startTurnTimer() {
     stopTurnTimer();
+    if (areAllOpponentsFrozen()) {
+      updateTimerBadgeUI(Infinity);
+      return;
+    }
     turnTimeRemaining = 30;
     updateTimerBadgeUI(30);
 
@@ -2431,6 +2537,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function updateTimerBadgeUI(seconds) {
     if (!turnTimerSeconds) return;
+    if (areAllOpponentsFrozen()) {
+      turnTimerSeconds.textContent = '∞';
+      if (turnTimerBadge) {
+        turnTimerBadge.classList.remove('warning', 'critical');
+        turnTimerBadge.classList.add('timestop-frozen-timer');
+      }
+      return;
+    }
+    if (turnTimerBadge) {
+      turnTimerBadge.classList.remove('timestop-frozen-timer');
+    }
     const s = Math.max(0, seconds);
     turnTimerSeconds.textContent = s;
 
@@ -4433,6 +4550,63 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Check if ALL active opponent players are currently frozen in time
+  function areAllOpponentsFrozen() {
+    if (!roomState || !Array.isArray(roomState.players)) return false;
+    const otherPlayers = roomState.players.filter(p => p.id !== playerProfile.id && !p.burnedOut);
+    if (otherPlayers.length === 0) return false;
+    return otherPlayers.every(p => !!p.timeFrozen);
+  }
+
+  // BFS Pathfinding between two points avoiding walls for Free Running
+  function findPathBetween(startPos, targetPos, walls, gridSize = GRID_SIZE) {
+    if (!startPos || !targetPos) return null;
+    if (startPos.r === targetPos.r && startPos.c === targetPos.c) return [];
+
+    const gSize = gridSize || GRID_SIZE || 11;
+    const visited = Array.from({ length: gSize }, () => Array(gSize).fill(false));
+    const parent = Array.from({ length: gSize }, () => Array(gSize).fill(null));
+    const queue = [{ r: startPos.r, c: startPos.c }];
+    visited[startPos.r][startPos.c] = true;
+
+    const directions = [
+      { dr: -1, dc: 0 },
+      { dr: 1, dc: 0 },
+      { dr: 0, dc: -1 },
+      { dr: 0, dc: 1 }
+    ];
+
+    let found = false;
+    while (queue.length > 0) {
+      const curr = queue.shift();
+      if (curr.r === targetPos.r && curr.c === targetPos.c) {
+        found = true;
+        break;
+      }
+      for (const d of directions) {
+        const nr = curr.r + d.dr;
+        const nc = curr.c + d.dc;
+        if (nr >= 0 && nr < gSize && nc >= 0 && nc < gSize && !visited[nr][nc]) {
+          if (!isMoveBlocked(curr.r, curr.c, nr, nc, walls || [])) {
+            visited[nr][nc] = true;
+            parent[nr][nc] = curr;
+            queue.push({ r: nr, c: nc });
+          }
+        }
+      }
+    }
+
+    if (!found) return null;
+
+    const path = [];
+    let step = targetPos;
+    while (step && (step.r !== startPos.r || step.c !== startPos.c)) {
+      path.unshift(step);
+      step = parent[step.r][step.c];
+    }
+    return path;
+  }
+
   function togglePlayerTimeFreeze(targetId, forceFrozen = null) {
     const targetPlayer = roomState.players.find(p => p.id === targetId);
     if (!targetPlayer) return;
@@ -4443,17 +4617,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (newFreezeState) {
       playSynthesizedSound('time_freeze');
       showToast(`Time has been FROZEN for ${targetPlayer.name}! Turn will be skipped.`, 'info');
-
-      // If it is currently this player's turn, immediately advance to the next unfrozen player
-      if (roomState.currentTurnIndex < roomState.players.length &&
-          roomState.players[roomState.currentTurnIndex].id === targetPlayer.id) {
-        const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
-        advanceTurn(nextIndex);
-        broadcastEvent('turn_timeout', {
-          playerId: targetPlayer.id,
-          nextTurnIndex: nextIndex
-        });
-      }
     } else {
       playSynthesizedSound('time_resume');
       showToast(`Time restored for ${targetPlayer.name}.`, 'success');
@@ -4470,11 +4633,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Dynamic Turn & Free Run management based on whether ALL opponents are frozen
+    if (areAllOpponentsFrozen()) {
+      const hartIndex = roomState.players.findIndex(p => p.id === playerProfile.id);
+      if (hartIndex !== -1) {
+        roomState.currentTurnIndex = hartIndex;
+        stopTurnTimer();
+        updateTimerBadgeUI(Infinity);
+        showToast('All opponents frozen in time! Hart can now run freely!', 'success');
+      }
+    } else {
+      // If not all opponents are frozen, normal turn-taking is enforced.
+      // If the currently active player was just frozen, pass turn to the next unfrozen player.
+      const currentActive = roomState.players[roomState.currentTurnIndex];
+      if (currentActive && currentActive.timeFrozen) {
+        const nextIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+        advanceTurn(nextIndex);
+      } else {
+        resetTurnTimer();
+      }
+    }
+
     // Broadcast state to all peers
     broadcastEvent('istaroth_timestop_toggle', {
       targetId: targetPlayer.id,
       isFrozen: targetPlayer.timeFrozen,
-      casterId: playerProfile.id
+      casterId: playerProfile.id,
+      currentTurnIndex: roomState.currentTurnIndex,
+      allFrozen: areAllOpponentsFrozen()
     });
 
     saveActiveSession();
