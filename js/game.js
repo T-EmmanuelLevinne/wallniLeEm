@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBurnOut = document.getElementById('btn-burn-out');
   const btnBurnOutText = document.getElementById('btn-burn-out-text');
   const btnSukunaMode = document.getElementById('btn-sukuna-mode');
-  let isSukunaButtonRevealed = isMobileDevice();
+  let isSukunaButtonRevealed = false;
   let isSukunaModeActive = false;
   const sukunaArsenalBar = document.getElementById('sukuna-arsenal-bar');
   const btnSukunaDismantle = document.getElementById('btn-sukuna-dismantle');
@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Istaroth Mode & Time Stop (Dev 'Hart')
   const btnIstarothMode = document.getElementById('btn-istaroth-mode');
-  let isIstarothButtonRevealed = isMobileDevice();
+  let isIstarothButtonRevealed = false;
   let isIstarothModeActive = false;
   const istarothArsenalBar = document.getElementById('istaroth-arsenal-bar');
   const btnIstarothTimeStop = document.getElementById('btn-istaroth-timestop');
@@ -155,18 +155,51 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnReversetimeRewindAll = document.getElementById('btn-reversetime-rewind-all');
   const btnCloseReverseTime = document.getElementById('btn-close-reversetime');
 
-  // On mobile devices, both Sukuna Mode and Istaroth buttons appear automatically without pressing keys
-  if (isMobileDevice()) {
-    if (btnSukunaMode) btnSukunaMode.style.display = 'inline-flex';
-    if (btnIstarothMode) btnIstarothMode.style.display = 'inline-flex';
-  }
-  window.addEventListener('resize', () => {
-    if (isMobileDevice()) {
-      isSukunaButtonRevealed = true;
-      isIstarothButtonRevealed = true;
-      if (btnSukunaMode) btnSukunaMode.style.display = 'inline-flex';
-      if (btnIstarothMode) btnIstarothMode.style.display = 'inline-flex';
+  // Dedicated visibility controller for developer exclusive actions
+  // Ensures regular players ("others") NEVER see Sukuna Mode or Istaroth buttons on mobile or desktop.
+  function updateDevButtonsVisibility() {
+    const isLeEm = (typeof isLeEmPlayer === 'function') ? isLeEmPlayer() : false;
+    const isHart = (typeof isHartPlayer === 'function') ? isHartPlayer() : false;
+    const isMobile = (typeof isMobileDevice === 'function') ? isMobileDevice() : false;
+
+    // Sukuna Mode: strictly exclusive to verified Developer 'Le Em'
+    if (btnSukunaMode) {
+      if (isLeEm && (isMobile || isSukunaButtonRevealed)) {
+        btnSukunaMode.style.display = 'inline-flex';
+      } else {
+        btnSukunaMode.style.display = 'none';
+      }
     }
+    if (sukunaArsenalBar) {
+      if (isLeEm && isSukunaModeActive) {
+        sukunaArsenalBar.style.display = 'flex';
+      } else {
+        sukunaArsenalBar.style.display = 'none';
+      }
+    }
+
+    // Istaroth Mode: strictly exclusive to verified Developer 'Hart'
+    if (btnIstarothMode) {
+      if (isHart && (isMobile || isIstarothButtonRevealed)) {
+        btnIstarothMode.style.display = 'inline-flex';
+      } else {
+        btnIstarothMode.style.display = 'none';
+      }
+    }
+    if (istarothArsenalBar) {
+      if (isHart && isIstarothModeActive) {
+        istarothArsenalBar.style.display = 'flex';
+      } else {
+        istarothArsenalBar.style.display = 'none';
+      }
+    }
+  }
+
+  // Ensure dev buttons are strictly hidden on startup until developer verification
+  updateDevButtonsVisibility();
+
+  window.addEventListener('resize', () => {
+    updateDevButtonsVisibility();
   });
 
   const modalBurnConfirm = document.getElementById('modal-burn-confirm');
@@ -223,6 +256,7 @@ document.addEventListener('DOMContentLoaded', () => {
         p.isSpectating = false;
       });
     }
+    updateDevButtonsVisibility();
   }
 
   // Helper: Computes odd grid dimension with an exact single center tile
@@ -339,6 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (playerProfile && playerProfile.name && isDevName(playerProfile.name) && playerProfile.isDev) {
       isDevVerified = true;
     }
+    updateDevButtonsVisibility();
     isHost = !!session.isHost;
     roomState.code = session.roomCode;
     roomState.gameStarted = true;
@@ -495,6 +530,7 @@ document.addEventListener('DOMContentLoaded', () => {
       inputPlayerName.value = playerProfile.name;
       updateDevTagPreview(playerProfile.name);
       closeDevPasscodeModal();
+      updateDevButtonsVisibility();
       const isHart = (targetName.trim().toLowerCase() === 'hart');
       const tagLabel = isHart ? 'TIME' : 'DEV';
       showToast(`Developer verified! Welcome ${playerProfile.name} [${tagLabel}].`, 'success');
@@ -513,6 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     inputPlayerName.value = 'Player 1';
     updateDevTagPreview('Player 1');
     closeDevPasscodeModal();
+    updateDevButtonsVisibility();
     showToast('Developer verification cancelled.', 'neutral');
   }
 
@@ -548,6 +585,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     playerProfile.name = trimmed || 'Player 1';
     updateDevTagPreview(playerProfile.name);
+    updateDevButtonsVisibility();
   });
 
   // Profile Screen Actions
@@ -1367,18 +1405,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setGridDimensions(activeGridSize);
     currentActionMode = 'MOVE';
     showScreen(screens.game);
-    if ((isMobileDevice() || isSukunaButtonRevealed) && btnSukunaMode) {
-      btnSukunaMode.style.display = 'inline-flex';
-    }
-    if (isSukunaModeActive && isLeEmPlayer() && sukunaArsenalBar) {
-      sukunaArsenalBar.style.display = 'flex';
-    }
-    if ((isMobileDevice() || isIstarothButtonRevealed) && btnIstarothMode) {
-      btnIstarothMode.style.display = 'inline-flex';
-    }
-    if (isIstarothModeActive && isHartPlayer() && istarothArsenalBar) {
-      istarothArsenalBar.style.display = 'flex';
-    }
+    updateDevButtonsVisibility();
     saveActiveSession();
     renderBoardState();
     startTurnTimer();
@@ -1627,6 +1654,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderBoardState() {
+    updateDevButtonsVisibility();
     boardGrid.innerHTML = '';
     boardGrid.style.gridTemplateColumns = `repeat(${GRID_SIZE}, 1fr)`;
     boardGrid.style.gridTemplateRows = `repeat(${GRID_SIZE}, 1fr)`;
@@ -3072,24 +3100,23 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function revealSukunaButton() {
+    if (!isLeEmPlayer()) return;
     const btn = document.getElementById('btn-sukuna-mode');
     if (!btn) return;
 
-    btn.style.display = 'inline-flex';
+    isSukunaButtonRevealed = true;
+    updateDevButtonsVisibility();
+
     btn.classList.add('sukuna-unlocked-pop');
     setTimeout(() => btn.classList.remove('sukuna-unlocked-pop'), 800);
 
     // Play gambale.mp3
     playAudio('audio/gambale.mp3', 0.95);
-
-    if (!isSukunaButtonRevealed) {
-      isSukunaButtonRevealed = true;
-      showToast('Cursed energy stirred... Sukuna Mode unlocked!', 'success');
-    }
+    showToast('Cursed energy stirred... Sukuna Mode unlocked!', 'success');
   }
 
   function hideSukunaMode() {
-    isSukunaButtonRevealed = isMobileDevice();
+    isSukunaButtonRevealed = false;
     isSukunaModeActive = false;
     playerProfile.isSukuna = false;
 
@@ -3103,16 +3130,9 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.remove('active');
       const textSpan = btn.querySelector('.sukuna-text');
       if (textSpan) textSpan.textContent = 'SUKUNA MODE';
-      if (!isMobileDevice()) {
-        btn.style.display = 'none';
-      } else {
-        btn.style.display = 'inline-flex';
-      }
     }
 
-    if (sukunaArsenalBar) {
-      sukunaArsenalBar.style.display = 'none';
-    }
+    updateDevButtonsVisibility();
 
     broadcastEvent('player_sukuna_mode', {
       playerId: playerProfile.id,
@@ -3156,9 +3176,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (sukunaArsenalBar) {
-      sukunaArsenalBar.style.display = isSukunaModeActive ? 'flex' : 'none';
-    }
+    updateDevButtonsVisibility();
 
     if (isSukunaModeActive) {
       // 1. Play ONLY gambale.mp3 as requested
@@ -4135,12 +4153,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function revealIstarothButton() {
+    if (!isHartPlayer()) return;
     const btn = document.getElementById('btn-istaroth-mode');
     if (!btn) return;
-
-    btn.style.display = 'inline-flex';
-    btn.classList.add('sukuna-unlocked-pop');
-    setTimeout(() => btn.classList.remove('sukuna-unlocked-pop'), 800);
 
     isIstarothButtonRevealed = true;
     isIstarothModeActive = true;
@@ -4154,9 +4169,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     btn.classList.add('active');
-    if (istarothArsenalBar) {
-      istarothArsenalBar.style.display = 'flex';
-    }
+    updateDevButtonsVisibility();
+
+    btn.classList.add('sukuna-unlocked-pop');
+    setTimeout(() => btn.classList.remove('sukuna-unlocked-pop'), 800);
 
     playSynthesizedSound('celestial_ascend');
 
@@ -4171,7 +4187,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function hideIstarothMode() {
-    isIstarothButtonRevealed = isMobileDevice();
+    isIstarothButtonRevealed = false;
     isIstarothModeActive = false;
     playerProfile.isIstaroth = false;
 
@@ -4183,19 +4199,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('btn-istaroth-mode');
     if (btn) {
       btn.classList.remove('active');
-      if (!isMobileDevice()) {
-        btn.style.display = 'none';
-      } else {
-        btn.style.display = 'inline-flex';
-      }
-    }
-
-    if (istarothArsenalBar) {
-      istarothArsenalBar.style.display = 'none';
     }
 
     closeTimeStopSelectionModal();
     closeReverseTimeSelectionModal();
+
+    updateDevButtonsVisibility();
 
     broadcastEvent('player_istaroth_mode', {
       playerId: playerProfile.id,
@@ -4236,9 +4245,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    if (istarothArsenalBar) {
-      istarothArsenalBar.style.display = isIstarothModeActive ? 'flex' : 'none';
-    }
+    updateDevButtonsVisibility();
 
     if (isIstarothModeActive) {
       playSynthesizedSound('celestial_ascend');

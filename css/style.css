@@ -4063,14 +4063,6 @@ select.input-field option {
   color: #ffffff;
 }
 
-/* Mobile Auto-Display: Both Sukuna Mode and Istaroth buttons appear without pressing keys */
-@media (max-width: 1024px), (pointer: coarse) {
-  .btn-sukuna-mode,
-  .btn-istaroth-mode {
-    display: inline-flex !important;
-  }
-}
-
 @media (max-width: 600px) {
   .burn-out-wrapper {
     gap: 0.5rem;
