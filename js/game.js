@@ -281,12 +281,27 @@ document.addEventListener('DOMContentLoaded', () => {
       this.rankings = [];
     }
 
-    recordMatch(winner, players, walls, goalPos, gameMode) {
-      if (!winner || !players || players.length === 0) return [];
+    recordMatch(winner, roomStateOrPlayers, walls, goalPos, gameMode) {
+      if (!winner) return [];
       roomState.scoreboard = roomState.scoreboard || {};
 
-      const gPos = goalPos || { r: 5, c: 5 };
-      const isTeamMode = (gameMode === 'team');
+      let players = [];
+      if (Array.isArray(roomStateOrPlayers)) {
+        players = roomStateOrPlayers;
+      } else if (roomStateOrPlayers && Array.isArray(roomStateOrPlayers.players)) {
+        players = roomStateOrPlayers.players;
+        gameMode = gameMode || roomStateOrPlayers.gameMode;
+        goalPos = goalPos || { r: Math.floor((roomStateOrPlayers.gridSize || 11) / 2), c: Math.floor((roomStateOrPlayers.gridSize || 11) / 2) };
+      } else if (roomState && Array.isArray(roomState.players)) {
+        players = roomState.players;
+        gameMode = gameMode || roomState.gameMode;
+        goalPos = goalPos || (typeof GOAL_POS !== 'undefined' ? GOAL_POS : { r: 5, c: 5 });
+      }
+
+      if (!players || players.length === 0) return [];
+
+      const gPos = goalPos || (typeof GOAL_POS !== 'undefined' ? GOAL_POS : { r: 5, c: 5 });
+      const isTeamMode = (gameMode === 'team' || roomState?.gameMode === 'team');
       const winningTeamId = isTeamMode ? winner.teamId : null;
 
       const scored = players.map(p => {
@@ -1722,6 +1737,14 @@ document.addEventListener('DOMContentLoaded', () => {
           showScreen(screens.mainMenu);
         }
       },
+      onGameVictory: (data) => {
+        stopTurnTimer();
+        const winner = roomState.players.find(pl => pl.id === data.winnerId);
+        if (winner) {
+          if (data.pos) winner.pos = data.pos;
+          triggerVictory(winner);
+        }
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
@@ -2745,6 +2768,32 @@ document.addEventListener('DOMContentLoaded', () => {
         playerToMove.pos = { r: destR, c: destC };
         clearMoveHighlights();
 
+        const activeGoalR = (typeof GOAL_POS !== 'undefined' && GOAL_POS.r !== undefined) ? GOAL_POS.r : Math.floor((roomState.gridSize || 11) / 2);
+        const activeGoalC = (typeof GOAL_POS !== 'undefined' && GOAL_POS.c !== undefined) ? GOAL_POS.c : Math.floor((roomState.gridSize || 11) / 2);
+        const reachedGoal = (destR === activeGoalR && destC === activeGoalC);
+
+        if (reachedGoal) {
+          stopTurnTimer();
+          broadcastEvent('player_move', {
+            playerId: playerProfile.id,
+            pos: { r: destR, c: destC },
+            from: fromPos,
+            isJump: isJump,
+            nextTurnIndex: roomState.currentTurnIndex,
+            isVictory: true
+          });
+          broadcastEvent('game_victory', {
+            winnerId: playerToMove.id,
+            winnerName: playerToMove.name,
+            teamName: playerToMove.teamName || null,
+            pos: { r: destR, c: destC }
+          });
+          saveActiveSession();
+          renderBoardState();
+          triggerVictory(playerToMove);
+          return;
+        }
+
         const hartIndex = roomState.players.findIndex(p => p.id === playerProfile.id);
         const nextTurnIndex = canHartRunFreely ? (hartIndex !== -1 ? hartIndex : 0) : getNextActiveTurnIndex(roomState.currentTurnIndex);
 
@@ -2759,10 +2808,6 @@ document.addEventListener('DOMContentLoaded', () => {
         advanceTurn(nextTurnIndex);
         saveActiveSession();
         renderBoardState();
-
-        if (destR === GOAL_POS.r && destC === GOAL_POS.c) {
-          triggerVictory(playerToMove);
-        }
       } else if (canHartRunFreely) {
         // Multi-tile Free Run: Hart can click any destination tile connected by an unblocked path when all players are frozen!
         const path = findPathBetween(playerToMove.pos, { r, c }, roomState.walls, GRID_SIZE);
@@ -3301,13 +3346,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       p.pos = data.pos;
+
+      const activeGoalR = (typeof GOAL_POS !== 'undefined' && GOAL_POS.r !== undefined) ? GOAL_POS.r : Math.floor((roomState.gridSize || 11) / 2);
+      const activeGoalC = (typeof GOAL_POS !== 'undefined' && GOAL_POS.c !== undefined) ? GOAL_POS.c : Math.floor((roomState.gridSize || 11) / 2);
+
+      if (data.isVictory || (data.pos && data.pos.r === activeGoalR && data.pos.c === activeGoalC)) {
+        stopTurnTimer();
+        saveActiveSession();
+        renderBoardState();
+        triggerVictory(p);
+        return;
+      }
+
       advanceTurn(data.nextTurnIndex);
       saveActiveSession();
       renderBoardState();
-
-      if (data.pos.r === GOAL_POS.r && data.pos.c === GOAL_POS.c) {
-        triggerVictory(p);
-      }
     }
   }
 
@@ -3321,19 +3374,30 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function triggerVictory(winner, customSubtitle) {
     stopTurnTimer();
+    if (!winner) return;
+
+    roomState.winner = winner;
+    roomState.gameStarted = false;
+
     const isTeam = (roomState.gameMode === 'team' && winner.teamName);
     const devBadge = getPlayerBadgeHTML(winner);
     winnerTitle.innerHTML = isTeam ? `${escapeHTML(winner.teamName)} Wins!` : `${escapeHTML(winner.name)}${devBadge} Wins!`;
+    const activeGoalR = (typeof GOAL_POS !== 'undefined' && GOAL_POS.r !== undefined) ? GOAL_POS.r : Math.floor((roomState.gridSize || 11) / 2);
+    const activeGoalC = (typeof GOAL_POS !== 'undefined' && GOAL_POS.c !== undefined) ? GOAL_POS.c : Math.floor((roomState.gridSize || 11) / 2);
     const defaultSubtitle = isTeam
-      ? `${escapeHTML(winner.name)}${devBadge} led ${escapeHTML(winner.teamName)} to the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`
-      : `${escapeHTML(winner.name)}${devBadge} reached the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`;
+      ? `${escapeHTML(winner.name)}${devBadge} led ${escapeHTML(winner.teamName)} to the golden center goal (${activeGoalR}, ${activeGoalC})!`
+      : `${escapeHTML(winner.name)}${devBadge} reached the golden center goal (${activeGoalR}, ${activeGoalC})!`;
     winnerSubtitle.innerHTML = customSubtitle || defaultSubtitle;
 
-    // Record match to scoreboard and render 1st, 2nd, 3rd, 4th rankings
-    scoreboardManager.recordMatch(winner, roomState);
-    const victoryScoreboardList = document.getElementById('victory-scoreboard-list');
-    if (victoryScoreboardList) {
-      scoreboardManager.renderRankings(victoryScoreboardList);
+    // Record match to scoreboard safely
+    try {
+      scoreboardManager.recordMatch(winner, roomState);
+      const victoryScoreboardList = document.getElementById('victory-scoreboard-list');
+      if (victoryScoreboardList) {
+        scoreboardManager.renderRankings(victoryScoreboardList);
+      }
+    } catch (e) {
+      console.warn('Scoreboard recording error:', e);
     }
 
     // Reset member ready flags, burnout statuses, and blocked movement when game ends
@@ -3344,8 +3408,9 @@ document.addEventListener('DOMContentLoaded', () => {
       p.isBlockedMove = false;
     });
     resetPlayerStatus();
-    chatManager.clear();
+    if (window.chatManager) chatManager.clear();
 
+    saveActiveSession();
     renderVictoryUI();
     modalVictory.classList.add('active');
 

@@ -464,14 +464,16 @@ select.input-field option {
    -------------------------------------------------------------------------- */
 
 .screen#screen-game {
-  max-width: 960px;
+  width: 100%;
+  max-width: 1400px;
+  padding: 0.5rem 1rem;
 }
 
 .game-layout {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1rem;
+  gap: 1.25rem;
   width: 100%;
 }
 
@@ -480,7 +482,7 @@ select.input-field option {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1300px;
   background: var(--bg-card);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-glass);
@@ -522,14 +524,21 @@ select.input-field option {
   flex-direction: row;
   align-items: flex-start;
   justify-content: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
   width: 100%;
-  max-width: 1180px;
+  max-width: 1300px;
+}
+
+.game-board-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
 }
 
 /* Left Players Sidebar */
 .game-players-sidebar {
-  width: 220px;
+  width: 230px;
   flex-shrink: 0;
   background: var(--bg-card);
   backdrop-filter: blur(16px);
@@ -1324,8 +1333,8 @@ select.input-field option {
 /* Metallic Outer Board Frame */
 .board-container {
   position: relative;
-  width: 100%;
-  max-width: 620px;
+  width: min(600px, 66vh, 48vw);
+  height: min(600px, 66vh, 48vw);
   aspect-ratio: 1 / 1;
   background: #c5cdd8;
   border-radius: 24px;
@@ -4889,8 +4898,8 @@ select.input-field option {
    IN-GAME CHATBOX & MOBILE DRAWER STYLES
    ========================================================================== */
 .game-chat-sidebar {
-  width: 270px;
-  height: 580px;
+  width: 280px;
+  height: min(600px, 66vh, 48vw);
   max-height: calc(100vh - 160px);
   flex-shrink: 0;
   background: var(--bg-card);

@@ -126,6 +126,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'room_join_rejected' }, ({ payload }) => {
       if (callbacks.onRoomJoinRejected) callbacks.onRoomJoinRejected(payload);
     })
+    .on('broadcast', { event: 'game_victory' }, ({ payload }) => {
+      if (callbacks.onGameVictory) callbacks.onGameVictory(payload);
+    })
     .on('presence', { event: 'sync' }, () => {
       if (callbacks.onPresenceSync && currentChannel) {
         try {
@@ -187,6 +190,7 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'chat_message' && callbacks.onChatMessage) callbacks.onChatMessage(payload);
     if (type === 'player_kicked' && callbacks.onPlayerKicked) callbacks.onPlayerKicked(payload);
     if (type === 'room_join_rejected' && callbacks.onRoomJoinRejected) callbacks.onRoomJoinRejected(payload);
+    if (type === 'game_victory' && callbacks.onGameVictory) callbacks.onGameVictory(payload);
   };
 
   setTimeout(() => {
