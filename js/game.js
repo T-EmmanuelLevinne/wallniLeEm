@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
     gridSize: 11,    // 11 (2-4 players) or 13 (5-8 players)
     maxPlayers: 4,
     players: [],
+    originalPlayers: [], // Track players who were in the match when started
+    kickedPlayerIds: [], // Blacklist of kicked players who cannot rejoin
+    scoreboard: {},      // Persistent room leaderboard { [playerId]: { wins, totalScore, ... } }
     currentTurnIndex: 0,
     gameStarted: false,
     walls: [],
@@ -113,6 +116,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnVictoryReady = document.getElementById('btn-victory-ready');
   const btnPlayAgain = document.getElementById('btn-play-again');
   const btnExitGame = document.getElementById('btn-exit-game');
+
+  // Room Scoreboard Elements
+  const modalScoreboard = document.getElementById('modal-scoreboard');
+  const btnToggleScoreboard = document.getElementById('btn-toggle-scoreboard');
+  const btnCloseScoreboard = document.getElementById('btn-close-scoreboard');
+  const modalScoreboardList = document.getElementById('modal-scoreboard-list');
+  const victoryScoreboardList = document.getElementById('victory-scoreboard-list');
 
   const turnTimerBadge = document.getElementById('turn-timer-badge');
   const turnTimerSeconds = document.getElementById('turn-timer-seconds');
@@ -248,15 +258,516 @@ document.addEventListener('DOMContentLoaded', () => {
     playerProfile.isSpectating = false;
     playerProfile.isReady = false;
     playerProfile.timeFrozen = false;
+    playerProfile.isBlockedMove = false;
     cancelActiveErasureSequence();
+    if (window.chatManager) window.chatManager.clear();
     if (roomState && Array.isArray(roomState.players)) {
       roomState.players.forEach(p => {
         p.timeFrozen = false;
         p.burnedOut = false;
         p.isSpectating = false;
+        p.isBlockedMove = false;
       });
     }
     updateDevButtonsVisibility();
+  }
+
+  // ==========================================================================
+  // SCOREBOARD MANAGER (OOP)
+  // Encapsulates 1st, 2nd, 3rd, 4th rankings and room statistics across matches
+  // ==========================================================================
+  class ScoreboardManager {
+    constructor() {
+      this.rankings = [];
+    }
+
+    recordMatch(winner, players, walls, goalPos, gameMode) {
+      if (!winner || !players || players.length === 0) return [];
+      roomState.scoreboard = roomState.scoreboard || {};
+
+      const gPos = goalPos || { r: 5, c: 5 };
+      const isTeamMode = (gameMode === 'team');
+      const winningTeamId = isTeamMode ? winner.teamId : null;
+
+      const scored = players.map(p => {
+        const isDirectWinner = (p.id === winner.id);
+        const isWinningTeam = isTeamMode && (p.teamId === winningTeamId);
+        let dist = 999;
+        if (p.pos) {
+          dist = Math.abs(p.pos.r - gPos.r) + Math.abs(p.pos.c - gPos.c);
+        }
+        return {
+          player: p,
+          isWinner: isDirectWinner,
+          isWinningTeam: isWinningTeam,
+          burnedOut: !!p.burnedOut,
+          distance: dist
+        };
+      });
+
+      // 1st: direct winner first, then winning team partner
+      // 2nd, 3rd, 4th: ranked by proximity to center goal, non-burned out before burned out
+      scored.sort((a, b) => {
+        if (a.isWinner && !b.isWinner) return -1;
+        if (!a.isWinner && b.isWinner) return 1;
+        if (a.isWinningTeam && !b.isWinningTeam) return -1;
+        if (!a.isWinningTeam && b.isWinningTeam) return 1;
+        if (!a.burnedOut && b.burnedOut) return -1;
+        if (a.burnedOut && !b.burnedOut) return 1;
+        return a.distance - b.distance;
+      });
+
+      this.rankings = scored.map((item, idx) => {
+        const rank = idx + 1;
+        const p = item.player;
+        const pts = rank === 1 ? 100 : rank === 2 ? 60 : rank === 3 ? 30 : 10;
+
+        if (!roomState.scoreboard[p.id]) {
+          roomState.scoreboard[p.id] = {
+            id: p.id,
+            name: p.name,
+            color: p.color,
+            teamName: p.teamName || null,
+            teamId: p.teamId || null,
+            wins: 0,
+            totalScore: 0,
+            matchesPlayed: 0
+          };
+        }
+
+        const stat = roomState.scoreboard[p.id];
+        stat.name = p.name;
+        stat.color = p.color;
+        stat.teamName = p.teamName || stat.teamName;
+        stat.teamId = p.teamId || stat.teamId;
+        stat.matchesPlayed += 1;
+        stat.totalScore += pts;
+        if (rank === 1) stat.wins += 1;
+
+        return {
+          rank: rank,
+          player: p,
+          wins: stat.wins,
+          totalScore: stat.totalScore,
+          matchPoints: pts
+        };
+      });
+
+      return this.rankings;
+    }
+
+    renderRankings(containerEl) {
+      if (!containerEl) return;
+      containerEl.innerHTML = '';
+
+      const rankBadges = {
+        1: { icon: '🥇', label: '1st', class: 'rank-1' },
+        2: { icon: '🥈', label: '2nd', class: 'rank-2' },
+        3: { icon: '🥉', label: '3rd', class: 'rank-3' },
+        4: { icon: '🏅', label: '4th', class: 'rank-4' }
+      };
+
+      this.rankings.forEach(item => {
+        const p = item.player;
+        const rBadge = rankBadges[item.rank] || { icon: '🏅', label: `${item.rank}th`, class: 'rank-other' };
+        const teamTag = (roomState.gameMode === 'team' && p.teamName)
+          ? `<span class="score-team-tag team-tag-${(p.teamId || 'A').toLowerCase()}">${escapeHTML(p.teamName)}</span>`
+          : '';
+        const isMe = (p.id === playerProfile.id);
+
+        const card = document.createElement('div');
+        card.className = `scoreboard-card-item ${rBadge.class}`;
+        card.innerHTML = `
+          <div class="score-rank-badge">
+            <span class="rank-icon">${rBadge.icon}</span>
+            <span class="rank-label">${rBadge.label}</span>
+          </div>
+          <div class="score-player-info">
+            <div class="player-slot-marble marble-${p.color}"></div>
+            <span class="score-name">${escapeHTML(p.name)} ${isMe ? '<small style="opacity:0.75;">(You)</small>' : ''}</span>
+            ${teamTag}
+          </div>
+          <div class="score-stats">
+            <span class="score-wins">🏆 ${item.wins} Wins</span>
+            <span class="score-points">+${item.matchPoints} pts</span>
+          </div>
+        `;
+        containerEl.appendChild(card);
+      });
+    }
+
+    renderCumulative(containerEl) {
+      if (!containerEl) return;
+      containerEl.innerHTML = '';
+
+      const board = roomState.scoreboard || {};
+      const entries = Object.values(board);
+      if (entries.length === 0) {
+        containerEl.innerHTML = '<div style="text-align:center; padding:1.5rem; color:var(--text-muted); font-size:0.85rem;">No matches recorded yet.</div>';
+        return;
+      }
+
+      entries.sort((a, b) => b.wins !== a.wins ? b.wins - a.wins : b.totalScore - a.totalScore);
+
+      const rankBadges = {
+        1: { icon: '🥇', label: '1st', class: 'rank-1' },
+        2: { icon: '🥈', label: '2nd', class: 'rank-2' },
+        3: { icon: '🥉', label: '3rd', class: 'rank-3' },
+        4: { icon: '🏅', label: '4th', class: 'rank-4' }
+      };
+
+      entries.forEach((item, idx) => {
+        const rank = idx + 1;
+        const rBadge = rankBadges[rank] || { icon: '🏅', label: `${rank}th`, class: 'rank-other' };
+        const isMe = (item.id === playerProfile.id);
+        const teamTag = item.teamName
+          ? `<span class="score-team-tag team-tag-${(item.teamId || 'A').toLowerCase()}">${escapeHTML(item.teamName)}</span>`
+          : '';
+
+        const card = document.createElement('div');
+        card.className = `scoreboard-card-item ${rBadge.class}`;
+        card.innerHTML = `
+          <div class="score-rank-badge">
+            <span class="rank-icon">${rBadge.icon}</span>
+            <span class="rank-label">${rBadge.label}</span>
+          </div>
+          <div class="score-player-info">
+            <div class="player-slot-marble marble-${item.color}"></div>
+            <span class="score-name">${escapeHTML(item.name)} ${isMe ? '<small style="opacity:0.75;">(You)</small>' : ''}</span>
+            ${teamTag}
+          </div>
+          <div class="score-stats">
+            <span class="score-wins">🏆 ${item.wins} Wins</span>
+            <span class="score-points">${item.totalScore} pts</span>
+          </div>
+        `;
+        containerEl.appendChild(card);
+      });
+    }
+
+    clear() {
+      this.rankings = [];
+      if (roomState) roomState.scoreboard = {};
+    }
+  }
+
+  // ==========================================================================
+  // CHAT MANAGER (OOP)
+  // Encapsulates in-game chat, anti-spam rate limiting, mobile drawer,
+  // and cleanup upon match completion or disconnection.
+  // ==========================================================================
+  class ChatManager {
+    constructor() {
+      this.container = document.getElementById('chat-messages-container');
+      this.inputField = document.getElementById('chat-input-field');
+      this.form = document.getElementById('chat-form');
+      this.antiSpamNotice = document.getElementById('chat-anti-spam-warning');
+      this.mobileToggle = document.getElementById('btn-mobile-chat-toggle');
+      this.mobileClose = document.getElementById('btn-chat-close-mobile');
+      this.sidebar = document.getElementById('game-chat-sidebar');
+      this.unreadBadge = document.getElementById('chat-unread-badge');
+      this.backdrop = document.getElementById('chat-mobile-backdrop');
+
+      this.messages = [];
+      this.unreadCount = 0;
+      this.isDrawerOpen = false;
+
+      // Anti-Spam state
+      this.minIntervalMs = 1000;
+      this.windowMs = 4000;
+      this.maxPerWindow = 3;
+      this.recentTimestamps = [];
+      this.cooldownUntil = 0;
+      this.spamTimer = null;
+
+      this.initEvents();
+    }
+
+    initEvents() {
+      if (this.form) {
+        this.form.addEventListener('submit', (e) => {
+          e.preventDefault();
+          this.handleSend();
+        });
+      }
+
+      if (this.mobileToggle) {
+        this.mobileToggle.addEventListener('click', () => {
+          this.toggleDrawer();
+        });
+      }
+
+      if (this.mobileClose) {
+        this.mobileClose.addEventListener('click', () => {
+          this.closeDrawer();
+        });
+      }
+
+      if (this.backdrop) {
+        this.backdrop.addEventListener('click', () => {
+          this.closeDrawer();
+        });
+      }
+    }
+
+    isSpamming() {
+      const now = Date.now();
+      if (now < this.cooldownUntil) {
+        return true;
+      }
+      this.recentTimestamps = this.recentTimestamps.filter(t => now - t < this.windowMs);
+      if (this.recentTimestamps.length >= this.maxPerWindow) {
+        this.cooldownUntil = now + 3000;
+        return true;
+      }
+      if (this.recentTimestamps.length > 0 && (now - this.recentTimestamps[this.recentTimestamps.length - 1] < this.minIntervalMs)) {
+        return true;
+      }
+      return false;
+    }
+
+    showSpamWarning(seconds = 3) {
+      if (!this.antiSpamNotice) return;
+      this.antiSpamNotice.textContent = `Slow down! Anti-spam active (${seconds}s cooldown).`;
+      this.antiSpamNotice.style.display = 'block';
+      if (this.spamTimer) clearTimeout(this.spamTimer);
+      this.spamTimer = setTimeout(() => {
+        if (this.antiSpamNotice) this.antiSpamNotice.style.display = 'none';
+      }, seconds * 1000);
+    }
+
+    handleSend() {
+      if (!this.inputField) return;
+      const text = this.inputField.value.trim();
+      if (!text) return;
+
+      if (this.isSpamming()) {
+        const remainingSec = Math.max(1, Math.ceil((this.cooldownUntil - Date.now()) / 1000));
+        this.showSpamWarning(remainingSec);
+        return;
+      }
+
+      const now = Date.now();
+      this.recentTimestamps.push(now);
+      this.inputField.value = '';
+
+      const msg = {
+        senderId: playerProfile.id,
+        senderName: playerProfile.name || 'Player',
+        senderColor: playerProfile.color || 'blue',
+        teamName: (roomState.gameMode === 'team' && playerProfile.teamName) ? playerProfile.teamName : null,
+        teamId: playerProfile.teamId || null,
+        isDev: !!playerProfile.isDev,
+        text: text.slice(0, 150),
+        timestamp: now
+      };
+
+      broadcastEvent('chat_message', msg);
+      this.addMessage(msg, true);
+    }
+
+    addMessage(msg, isMe = false) {
+      this.messages.push(msg);
+      this.renderMessageElement(msg, isMe);
+
+      if (!isMe && !this.isDrawerOpen && window.innerWidth <= 900) {
+        this.unreadCount++;
+        this.updateUnreadUI();
+      }
+    }
+
+    renderMessageElement(msg, isMe) {
+      if (!this.container) return;
+
+      const row = document.createElement('div');
+      row.className = `chat-message-row ${isMe ? 'chat-me' : 'chat-other'}`;
+
+      const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const teamBadge = msg.teamName ? `<span class="chat-team-badge team-badge-${(msg.teamId || 'A').toLowerCase()}">${escapeHTML(msg.teamName)}</span>` : '';
+      const devBadge = msg.isDev ? '<span class="dev-tag-bubble" style="font-size:0.6rem; padding:1px 4px; background:#ef4444; color:#fff; border-radius:4px; margin-right:2px;">DEV</span>' : '';
+
+      row.innerHTML = `
+        <div class="chat-bubble">
+          <div class="chat-meta">
+            <span class="chat-sender" style="color:${isMe ? '#38bdf8' : '#e0e7ff'}; font-weight:700;">${escapeHTML(msg.senderName)}</span>
+            ${teamBadge}
+            ${devBadge}
+            <span class="chat-time">${timeStr}</span>
+          </div>
+          <div class="chat-text">${escapeHTML(msg.text)}</div>
+        </div>
+      `;
+
+      this.container.appendChild(row);
+      this.container.scrollTop = this.container.scrollHeight;
+    }
+
+    toggleDrawer() {
+      if (this.isDrawerOpen) this.closeDrawer();
+      else this.openDrawer();
+    }
+
+    openDrawer() {
+      this.isDrawerOpen = true;
+      if (this.sidebar) this.sidebar.classList.add('mobile-open');
+      if (this.backdrop) this.backdrop.style.display = 'block';
+      this.unreadCount = 0;
+      this.updateUnreadUI();
+      if (this.inputField) this.inputField.focus();
+    }
+
+    closeDrawer() {
+      this.isDrawerOpen = false;
+      if (this.sidebar) this.sidebar.classList.remove('mobile-open');
+      if (this.backdrop) this.backdrop.style.display = 'none';
+    }
+
+    updateUnreadUI() {
+      if (!this.unreadBadge) return;
+      if (this.unreadCount > 0) {
+        this.unreadBadge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+        this.unreadBadge.style.display = 'block';
+      } else {
+        this.unreadBadge.style.display = 'none';
+      }
+    }
+
+    clear() {
+      this.messages = [];
+      this.unreadCount = 0;
+      this.updateUnreadUI();
+      if (this.container) {
+        this.container.innerHTML = `
+          <div class="chat-system-message">Game chat started! Chat is cleared when the game ends.</div>
+        `;
+      }
+    }
+
+    receiveMessage(msg) {
+      if (!msg) return;
+      if (msg.senderId === playerProfile.id) return;
+      this.addMessage(msg, false);
+    }
+  }
+
+  // Instantiate OOP Managers
+  const scoreboardManager = new ScoreboardManager();
+  window.scoreboardManager = scoreboardManager;
+  const chatManager = new ChatManager();
+  window.chatManager = chatManager;
+
+  // Scoreboard modal trigger button listeners
+  if (btnToggleScoreboard && modalScoreboard) {
+    btnToggleScoreboard.addEventListener('click', () => {
+      scoreboardManager.renderCumulative(modalScoreboardList);
+      modalScoreboard.classList.add('active');
+    });
+  }
+
+  if (btnCloseScoreboard && modalScoreboard) {
+    btnCloseScoreboard.addEventListener('click', () => {
+      modalScoreboard.classList.remove('active');
+    });
+  }
+
+  // ==========================================================================
+  // Joyful Turn Music Synth (Web Audio API)
+  // Plays a cheerful pentatonic melodic jingle when it becomes the player's turn
+  // ==========================================================================
+  let lastJoyfulTurnPlayerId = null;
+  let lastJoyfulTurnIndex = null;
+
+  function playJoyfulTurnMusic() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+
+      // Cheerful 5-note pentatonic arpeggio: C5, E5, G5, A5, C6
+      const notes = [
+        { f: 523.25, start: 0.00, dur: 0.11 },
+        { f: 659.25, start: 0.08, dur: 0.11 },
+        { f: 783.99, start: 0.16, dur: 0.12 },
+        { f: 880.00, start: 0.25, dur: 0.13 },
+        { f: 1046.50, start: 0.35, dur: 0.30 }
+      ];
+
+      const masterGain = ctx.createGain();
+      masterGain.gain.setValueAtTime(0.24, ctx.currentTime);
+      masterGain.connect(ctx.destination);
+
+      notes.forEach(note => {
+        const osc = ctx.createOscillator();
+        const noteGain = ctx.createGain();
+
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(note.f, ctx.currentTime + note.start);
+
+        const tStart = ctx.currentTime + note.start;
+        const tEnd = tStart + note.dur;
+
+        noteGain.gain.setValueAtTime(0, tStart);
+        noteGain.gain.linearRampToValueAtTime(0.35, tStart + 0.015);
+        noteGain.gain.exponentialRampToValueAtTime(0.001, tEnd);
+
+        osc.connect(noteGain);
+        noteGain.connect(masterGain);
+
+        osc.start(tStart);
+        osc.stop(tEnd + 0.05);
+      });
+
+      setTimeout(() => {
+        try { ctx.close(); } catch (e) { }
+      }, 850);
+    } catch (e) {
+      console.warn('Could not play joyful turn music:', e);
+    }
+  }
+
+  // ==========================================================================
+  // Host Kick Engine
+  // Allows the lobby host to kick any player mid-game or in waiting lobby
+  // ==========================================================================
+  function executeKickPlayer(targetId, targetName) {
+    if (!targetId) return;
+    if (!confirm(`Are you sure you want to kick ${targetName || 'this player'}? They will not be able to rejoin.`)) {
+      return;
+    }
+
+    roomState.kickedPlayerIds = roomState.kickedPlayerIds || [];
+    if (!roomState.kickedPlayerIds.includes(targetId)) {
+      roomState.kickedPlayerIds.push(targetId);
+    }
+
+    if (roomState.gameStarted) {
+      const kickedIdx = roomState.players.findIndex(p => p.id === targetId);
+      if (kickedIdx === roomState.currentTurnIndex) {
+        roomState.currentTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
+      }
+    }
+
+    roomState.players = roomState.players.filter(p => p.id !== targetId);
+
+    broadcastEvent('player_kicked', {
+      targetId: targetId,
+      targetName: targetName,
+      kickedPlayerIds: roomState.kickedPlayerIds
+    });
+
+    saveActiveSession();
+    broadcastEvent('room_sync', roomState);
+
+    showToast(`Kicked ${targetName || 'player'}.`, 'neutral');
+
+    if (roomState.gameStarted) {
+      renderBoardState();
+      renderGamePlayersList();
+      updateTurnHeaderUI();
+    } else {
+      renderLobbySlotsUI();
+      renderLobbyColorPickerUI();
+    }
   }
 
   // Helper: Computes odd grid dimension with an exact single center tile
@@ -800,7 +1311,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       onRoomJoinRequest: (joiningPlayer) => {
-        if (isHost && roomState.players.length < roomState.maxPlayers) {
+        if (!isHost) return;
+
+        // Check kicked blacklist
+        if (roomState.kickedPlayerIds && roomState.kickedPlayerIds.includes(joiningPlayer.id)) {
+          broadcastEvent('room_join_rejected', {
+            playerId: joiningPlayer.id,
+            reason: 'You were kicked from this room and cannot rejoin.'
+          });
+          return;
+        }
+
+        // If game has already started: only allow players who were in the lobby before!
+        if (roomState.gameStarted) {
+          const wasInLobby = (roomState.originalPlayers && roomState.originalPlayers.some(p => p.id === joiningPlayer.id)) ||
+            roomState.players.some(p => p.id === joiningPlayer.id);
+          if (!wasInLobby) {
+            broadcastEvent('room_join_rejected', {
+              playerId: joiningPlayer.id,
+              reason: 'Game is currently in progress. Only players originally in the lobby can rejoin.'
+            });
+            return;
+          }
+        }
+
+        if (roomState.players.length < roomState.maxPlayers) {
           if (!roomState.players.some(p => p.id === joiningPlayer.id)) {
             // Assign first available unique color to joining player
             const claimed = roomState.players.map(p => p.color);
@@ -819,39 +1354,88 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       },
       onRoomReconnect: (reconnectingPlayer) => {
-        if (isHost) {
-          const existing = roomState.players.find(p => p.id === reconnectingPlayer.id);
-          if (roomState.gameStarted) {
-            // USER REQUIREMENT: "it reconnected, it can only spectate as well."
-            if (existing) {
-              existing.burnedOut = true;
-              existing.isSpectating = true;
-              existing.pos = null;
-              if (reconnectingPlayer.isDev !== undefined) existing.isDev = reconnectingPlayer.isDev;
-            } else {
-              roomState.players.push({
-                ...reconnectingPlayer,
-                burnedOut: true,
-                isSpectating: true,
-                pos: null
-              });
+        if (!isHost) return;
+
+        // Check kicked blacklist
+        if (roomState.kickedPlayerIds && roomState.kickedPlayerIds.includes(reconnectingPlayer.id)) {
+          broadcastEvent('room_join_rejected', {
+            playerId: reconnectingPlayer.id,
+            reason: 'You were kicked from this room and cannot rejoin.'
+          });
+          return;
+        }
+
+        const existing = roomState.players.find(p => p.id === reconnectingPlayer.id);
+        const original = (roomState.originalPlayers || []).find(p => p.id === reconnectingPlayer.id) || existing;
+
+        if (roomState.gameStarted) {
+          // Requirement: ONLY ALLOWS TO JOIN WHO IS CURRENTLY INSIDE THE LOBBY BEFORE
+          if (!original && !existing) {
+            broadcastEvent('room_join_rejected', {
+              playerId: reconnectingPlayer.id,
+              reason: 'Game is currently in progress. Only players originally in the lobby can rejoin.'
+            });
+            return;
+          }
+
+          let target = existing;
+          if (!target) {
+            target = { ...reconnectingPlayer };
+            roomState.players.push(target);
+          }
+
+          // Restore designated team if Team Mode
+          if (roomState.gameMode === 'team' && original) {
+            target.teamId = original.teamId || target.teamId || 'A';
+            target.teamName = original.teamName || target.teamName || `Team ${target.teamId}`;
+            target.teamBadgeClass = original.teamBadgeClass || target.teamBadgeClass || `team-badge-${target.teamId.toLowerCase()}`;
+          }
+
+          // Restore designated color & position
+          if (original) {
+            if (original.color) target.color = original.color;
+            if (original.hex) target.hex = original.hex;
+            if (!target.pos && original.spawnPosition) {
+              target.pos = { ...original.spawnPosition };
             }
-            if (roomState.players[roomState.currentTurnIndex]?.id === reconnectingPlayer.id) {
-              roomState.currentTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
-            }
+          }
+
+          if (reconnectingPlayer.isDev !== undefined) target.isDev = reconnectingPlayer.isDev;
+
+          // Check if player's movement is blocked by walls
+          const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
+          const goalPos = { r: Math.floor(gSize / 2), c: Math.floor(gSize / 2) };
+          const playerPos = target.pos || original?.spawnPosition || { r: 0, c: 0 };
+          const walls = roomState.walls || [];
+          const canReachGoal = hasPathToGoal(playerPos, walls, gSize, goalPos);
+
+          if (canReachGoal) {
+            // Unblocked: Allowed to rejoin and move freely again!
+            target.burnedOut = false;
+            target.isSpectating = false;
+            target.isBlockedMove = false;
           } else {
-            if (existing) {
-              existing.name = reconnectingPlayer.name || existing.name;
-              if (reconnectingPlayer.isDev !== undefined) existing.isDev = reconnectingPlayer.isDev;
-            } else if (roomState.players.length < roomState.maxPlayers) {
-              roomState.players.push(reconnectingPlayer);
-            }
+            // Blocked: Present in game, can only spectate and place wall
+            target.burnedOut = false;
+            target.isSpectating = false;
+            target.isBlockedMove = true;
           }
-          saveActiveSession();
-          broadcastEvent('room_sync', roomState);
-          if (roomState.gameStarted) {
-            broadcastEvent('game_started', roomState);
+
+          if (roomState.players[roomState.currentTurnIndex]?.id === reconnectingPlayer.id && target.burnedOut) {
+            roomState.currentTurnIndex = getNextActiveTurnIndex(roomState.currentTurnIndex);
           }
+        } else {
+          if (existing) {
+            existing.name = reconnectingPlayer.name || existing.name;
+            if (reconnectingPlayer.isDev !== undefined) existing.isDev = reconnectingPlayer.isDev;
+          } else if (roomState.players.length < roomState.maxPlayers) {
+            roomState.players.push(reconnectingPlayer);
+          }
+        }
+        saveActiveSession();
+        broadcastEvent('room_sync', roomState);
+        if (roomState.gameStarted) {
+          broadcastEvent('game_started', roomState);
         }
       },
       onPresenceSync: (presenceState) => {
@@ -870,10 +1454,17 @@ document.addEventListener('DOMContentLoaded', () => {
         if (joinTimeout) clearTimeout(joinTimeout);
         if (joinRetryInterval) clearInterval(joinRetryInterval);
 
-        if (isReconnectingActive) {
-          // Check that there are active players left in the match
-          const anyOtherPlayers = (syncedRoomState.players || []).filter(p => p.id !== playerProfile.id);
+        // Check if I was kicked
+        if (syncedRoomState.kickedPlayerIds && syncedRoomState.kickedPlayerIds.includes(playerProfile.id)) {
+          clearActiveSession();
+          leaveGameRoomChannel();
+          showToast('You were kicked by the host and cannot rejoin this room.', 'danger');
+          showScreen(screens.mainMenu);
+          return;
+        }
 
+        if (isReconnectingActive) {
+          const anyOtherPlayers = (syncedRoomState.players || []).filter(p => p.id !== playerProfile.id);
           if (anyOtherPlayers.length === 0) {
             failReconnection(`Cannot reconnect: Match ${syncedRoomState.code} has no active players left.`);
             return;
@@ -885,32 +1476,23 @@ document.addEventListener('DOMContentLoaded', () => {
             reconnectTimeout = null;
           }
 
-          // USER REQUIREMENT: "Dont remove the thing reconnecting to existing lobby that is already playing, it reconnected, it can only spectate as well."
           if (syncedRoomState.gameStarted) {
-            playerProfile.burnedOut = true;
-            playerProfile.isSpectating = true;
-
             const meInRoom = syncedRoomState.players.find(p => p.id === playerProfile.id);
             if (meInRoom) {
-              meInRoom.burnedOut = true;
-              meInRoom.isSpectating = true;
-              meInRoom.pos = null;
-            } else {
-              syncedRoomState.players.push({
-                ...playerProfile,
-                burnedOut: true,
-                isSpectating: true,
-                pos: null
-              });
+              playerProfile.burnedOut = !!meInRoom.burnedOut;
+              playerProfile.isSpectating = !!meInRoom.isSpectating;
+              playerProfile.isBlockedMove = !!meInRoom.isBlockedMove;
+              if (meInRoom.teamId) {
+                playerProfile.teamId = meInRoom.teamId;
+                playerProfile.teamName = meInRoom.teamName;
+                playerProfile.teamBadgeClass = meInRoom.teamBadgeClass;
+              }
+              if (playerProfile.isBlockedMove) {
+                showToast(`Rejoined! Your path to the center is blocked by walls. You can place walls during your turn, but cannot move.`, 'warning', 6000);
+              } else {
+                showToast(`Rejoined match! You are on ${playerProfile.teamName || 'your team'} and can move freely.`, 'success');
+              }
             }
-
-            // If it was supposed to be this player's turn, advance turn so match continues
-            if (syncedRoomState.currentTurnIndex < syncedRoomState.players.length &&
-              syncedRoomState.players[syncedRoomState.currentTurnIndex].id === playerProfile.id) {
-              syncedRoomState.currentTurnIndex = getNextActiveTurnIndex(syncedRoomState.currentTurnIndex);
-            }
-
-            showToast(`Reconnected to live match ${syncedRoomState.code}! You are spectating.`, 'neutral');
           } else {
             showToast(`Reconnected to match ${syncedRoomState.code}!`, 'success');
           }
@@ -920,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
         setGridDimensions(gSize);
 
-        // Update local playerProfile if host assigned a new unique color or ready status
+        // Update local playerProfile if host assigned a new unique color, team, or ready status
         const meInRoom = roomState.players.find(p => p.id === playerProfile.id);
         if (meInRoom) {
           playerProfile.color = meInRoom.color;
@@ -928,6 +1510,12 @@ document.addEventListener('DOMContentLoaded', () => {
           playerProfile.isReady = !!meInRoom.isReady;
           playerProfile.burnedOut = !!meInRoom.burnedOut;
           playerProfile.isSpectating = !!meInRoom.isSpectating;
+          playerProfile.isBlockedMove = !!meInRoom.isBlockedMove;
+          if (meInRoom.teamId) {
+            playerProfile.teamId = meInRoom.teamId;
+            playerProfile.teamName = meInRoom.teamName;
+            playerProfile.teamBadgeClass = meInRoom.teamBadgeClass;
+          }
           if (meInRoom.isDev !== undefined) playerProfile.isDev = !!meInRoom.isDev;
         }
 
@@ -938,6 +1526,8 @@ document.addEventListener('DOMContentLoaded', () => {
             launchActiveGame();
           } else {
             renderBoardState();
+            renderGamePlayersList();
+            updateTurnHeaderUI();
           }
         } else {
           showScreen(screens.lobbyRoom);
@@ -1095,14 +1685,54 @@ document.addEventListener('DOMContentLoaded', () => {
       onIstarothErasure: (payload) => {
         performRemoteErasureSequence(payload);
       },
+      onChatMessage: (msg) => {
+        chatManager.receiveMessage(msg);
+      },
+      onPlayerKicked: (payload) => {
+        if (payload.targetId === playerProfile.id) {
+          if (joinRetryInterval) clearInterval(joinRetryInterval);
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          isReconnectingActive = false;
+          clearActiveSession();
+          leaveGameRoomChannel();
+          showToast('You have been kicked by the host and cannot rejoin this room.', 'danger', 6000);
+          showScreen(screens.mainMenu);
+          return;
+        }
+        roomState.kickedPlayerIds = payload.kickedPlayerIds || roomState.kickedPlayerIds || [];
+        roomState.players = roomState.players.filter(p => p.id !== payload.targetId);
+        showToast(`${payload.targetName || 'A player'} was kicked by the host.`, 'neutral');
+        if (roomState.gameStarted) {
+          renderBoardState();
+          renderGamePlayersList();
+          updateTurnHeaderUI();
+        } else {
+          renderLobbySlotsUI();
+          renderLobbyColorPickerUI();
+        }
+      },
+      onRoomJoinRejected: (payload) => {
+        if (payload.playerId === playerProfile.id) {
+          if (joinRetryInterval) clearInterval(joinRetryInterval);
+          if (reconnectTimeout) clearTimeout(reconnectTimeout);
+          isReconnectingActive = false;
+          clearActiveSession();
+          leaveGameRoomChannel();
+          showToast(payload.reason || 'Cannot join room: request was rejected.', 'danger', 6000);
+          showScreen(screens.mainMenu);
+        }
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
         const gSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
         setGridDimensions(gSize);
         resetPlayerStatus();
+        chatManager.clear();
         saveActiveSession();
         renderBoardState();
+        renderGamePlayersList();
+        updateTurnHeaderUI();
         startTurnTimer();
       }
     });
@@ -1274,11 +1904,26 @@ document.addEventListener('DOMContentLoaded', () => {
             : '<span class="player-slot-badge not-ready">Not Ready</span>';
         }
 
+        const meIsHost = (playerProfile.id === roomState.hostId) || (roomState.players[0] && roomState.players[0].id === playerProfile.id);
+        const canKick = meIsHost && !isMe && !isPlayerHost;
+        const kickBtnHTML = canKick ? `<button class="btn-player-kick" data-kick-id="${p.id}" data-kick-name="${escapeHTML(p.name)}" title="Kick player">Kick</button>` : '';
+
         slot.innerHTML = `
           <div class="player-slot-marble marble-${p.color}"></div>
           <span class="player-slot-name">${escapeHTML(p.name)}${devBadgeHTML} ${isMe ? '<span style="opacity:0.75; font-size:0.85em;">(You)</span>' : ''}</span>
           ${badgeHTML}
+          ${kickBtnHTML}
         `;
+
+        if (canKick) {
+          const kickBtn = slot.querySelector('.btn-player-kick');
+          if (kickBtn) {
+            kickBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              executeKickPlayer(p.id, p.name);
+            });
+          }
+        }
       } else {
         slot.innerHTML = `
           <div class="player-slot-marble" style="background: rgba(255,255,255,0.1);"></div>
@@ -1398,6 +2043,18 @@ document.addEventListener('DOMContentLoaded', () => {
       p.turnOrder = idx + 1;
     });
 
+    roomState.originalPlayers = roomState.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      hex: p.hex,
+      teamId: p.teamId || null,
+      teamName: p.teamName || null,
+      teamBadgeClass: p.teamBadgeClass || null,
+      spawnPosition: { ...p.pos },
+      isDev: !!p.isDev
+    }));
+
     roomState.currentTurnIndex = 0;
     roomState.gameStarted = true;
     roomState.walls = [];
@@ -1413,11 +2070,14 @@ document.addEventListener('DOMContentLoaded', () => {
   function launchActiveGame() {
     const activeGridSize = roomState.gridSize || getGridSizeForPlayerCount(Math.max(roomState.players.length, roomState.maxPlayers));
     setGridDimensions(activeGridSize);
-    currentActionMode = 'MOVE';
+    currentActionMode = playerProfile.isBlockedMove ? 'WALL' : 'MOVE';
     showScreen(screens.game);
     updateDevButtonsVisibility();
+    chatManager.clear();
     saveActiveSession();
     renderBoardState();
+    renderGamePlayersList();
+    updateTurnHeaderUI();
     startTurnTimer();
   }
 
@@ -1442,6 +2102,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setActionMode(mode) {
     if (playerProfile.burnedOut) return;
+    if (playerProfile.isBlockedMove && mode === 'MOVE') {
+      showToast('Your path to the center is blocked by walls! You can only place walls.', 'warning');
+      mode = 'WALL';
+    }
     currentActionMode = mode;
     if (mode === 'MOVE') {
       if (btnModeMove) btnModeMove.classList.add('active');
@@ -1793,6 +2457,23 @@ document.addEventListener('DOMContentLoaded', () => {
           });
         }
 
+        // Team mode indicator inside the grid
+        if (roomState.gameMode === 'team' && p.teamName) {
+          const teamTag = document.createElement('span');
+          teamTag.className = `grid-marble-team-tag ${p.teamBadgeClass || ''}`;
+          teamTag.textContent = p.teamName;
+          marble.appendChild(teamTag);
+        }
+
+        // Blocked movement indicator (can only place wall)
+        if (p.isBlockedMove) {
+          marble.classList.add('marble-blocked-move');
+          const blockedBadge = document.createElement('span');
+          blockedBadge.className = 'marble-blocked-badge';
+          blockedBadge.textContent = 'WALL ONLY';
+          marble.appendChild(blockedBadge);
+        }
+
         cell.appendChild(marble);
 
         // Check if this player is moving in this render frame
@@ -1945,6 +2626,11 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (isMe) {
       turnLabel.innerHTML = `Your Turn!${devBadge}${teamTag}`;
       turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
+      if (lastJoyfulTurnPlayerId !== activePlayer.id || lastJoyfulTurnIndex !== roomState.currentTurnIndex) {
+        lastJoyfulTurnPlayerId = activePlayer.id;
+        lastJoyfulTurnIndex = roomState.currentTurnIndex;
+        playJoyfulTurnMusic();
+      }
     } else {
       turnLabel.innerHTML = `${escapeHTML(activePlayer.name)}${devBadge}'s Turn${teamTag}`;
       turnDot.className = `turn-dot turn-pulse marble-${activePlayer.color}`;
@@ -2004,6 +2690,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function handleCellClick(r, c) {
     if (playerProfile.burnedOut || isExecutingFreeRun) return;
+
+    if (playerProfile.isBlockedMove) {
+      showToast('Your path to the center is blocked by walls! You can only place walls.', 'warning');
+      setActionMode('WALL');
+      return;
+    }
 
     const canHartRunFreely = isHartPlayer() && areAllOpponentsFrozen();
     const activePlayer = roomState.players[roomState.currentTurnIndex];
@@ -2637,13 +3329,22 @@ document.addEventListener('DOMContentLoaded', () => {
       : `${escapeHTML(winner.name)}${devBadge} reached the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`;
     winnerSubtitle.innerHTML = customSubtitle || defaultSubtitle;
 
-    // Reset member ready flags and burnout statuses when game ends
+    // Record match to scoreboard and render 1st, 2nd, 3rd, 4th rankings
+    scoreboardManager.recordMatch(winner, roomState);
+    const victoryScoreboardList = document.getElementById('victory-scoreboard-list');
+    if (victoryScoreboardList) {
+      scoreboardManager.renderRankings(victoryScoreboardList);
+    }
+
+    // Reset member ready flags, burnout statuses, and blocked movement when game ends
     roomState.players.forEach(p => {
       p.isReady = false;
       p.burnedOut = false;
       p.isSpectating = false;
+      p.isBlockedMove = false;
     });
     resetPlayerStatus();
+    chatManager.clear();
 
     renderVictoryUI();
     modalVictory.classList.add('active');
@@ -2793,9 +3494,24 @@ document.addEventListener('DOMContentLoaded', () => {
     playerProfile.isReady = false;
     playerProfile.burnedOut = false;
     playerProfile.isSpectating = false;
+    playerProfile.isBlockedMove = false;
     roomState.walls = [];
     roomState.currentTurnIndex = 0;
     roomState.winner = null;
+
+    roomState.originalPlayers = roomState.players.map(p => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      hex: p.hex,
+      teamId: p.teamId || null,
+      teamName: p.teamName || null,
+      teamBadgeClass: p.teamBadgeClass || null,
+      spawnPosition: { ...p.pos },
+      isDev: !!p.isDev
+    }));
+
+    chatManager.clear();
 
     if (supabaseClient && roomState.code) {
       supabaseClient.from('matches').delete().eq('room_code', roomState.code).then(() => { }).catch(() => { });
@@ -2805,6 +3521,8 @@ document.addEventListener('DOMContentLoaded', () => {
     modalVictory.classList.remove('active');
     saveActiveSession();
     renderBoardState();
+    renderGamePlayersList();
+    updateTurnHeaderUI();
     startTurnTimer();
   });
 
@@ -2867,6 +3585,9 @@ document.addEventListener('DOMContentLoaded', () => {
           const isMe = (p.id === playerProfile.id);
           const isBurned = !!p.burnedOut;
           const devBadge = getPlayerBadgeHTML(p);
+          const isPlayerHost = (p.id === roomState.hostId || roomState.players[0]?.id === p.id);
+          const canKick = (isHost || roomState.players[0]?.id === playerProfile.id) && !isMe && !isPlayerHost;
+          const kickBtnHTML = canKick ? `<button class="btn-player-kick" data-kick-id="${p.id}" data-kick-name="${escapeHTML(p.name)}" title="Kick player mid-game">Kick</button>` : '';
 
           const card = document.createElement('div');
           card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -2893,6 +3614,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
                 ${devBadge}
                 ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+                ${kickBtnHTML}
               </div>
               <div class="live-player-sub-row">
                 <span class="live-player-status-badge ${statusClass}">${statusText}</span>
@@ -2900,6 +3622,17 @@ document.addEventListener('DOMContentLoaded', () => {
               </div>
             </div>
           `;
+
+          if (canKick) {
+            const kickBtn = card.querySelector('.btn-player-kick');
+            if (kickBtn) {
+              kickBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                executeKickPlayer(p.id, p.name);
+              });
+            }
+          }
+
           teamBlock.appendChild(card);
         });
 
@@ -2911,6 +3644,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const isMe = (p.id === playerProfile.id);
         const isBurned = !!p.burnedOut;
         const devBadge = getPlayerBadgeHTML(p);
+        const isPlayerHost = (p.id === roomState.hostId || roomState.players[0]?.id === p.id);
+        const canKick = (isHost || roomState.players[0]?.id === playerProfile.id) && !isMe && !isPlayerHost;
+        const kickBtnHTML = canKick ? `<button class="btn-player-kick" data-kick-id="${p.id}" data-kick-name="${escapeHTML(p.name)}" title="Kick player mid-game">Kick</button>` : '';
 
         const card = document.createElement('div');
         card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -2937,6 +3673,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <span class="live-player-name" title="${escapeHTML(p.name)}">${escapeHTML(p.name)}</span>
               ${devBadge}
               ${isMe ? '<span class="live-you-tag">YOU</span>' : ''}
+              ${kickBtnHTML}
             </div>
             <div class="live-player-sub-row">
               <span class="live-player-status-badge ${statusClass}">${statusText}</span>
@@ -2944,6 +3681,16 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </div>
         `;
+
+        if (canKick) {
+          const kickBtn = card.querySelector('.btn-player-kick');
+          if (kickBtn) {
+            kickBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              executeKickPlayer(p.id, p.name);
+            });
+          }
+        }
 
         livePlayersList.appendChild(card);
       });

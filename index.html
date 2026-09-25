@@ -9,7 +9,7 @@
     content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
 
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=3.5">
+  <link rel="stylesheet" href="css/style.css?v=3.6">
 
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -166,10 +166,25 @@
             <span id="turn-timer-seconds">30</span>s
           </div>
         </div>
-        <div class="action-mode-selector">
-          <button id="btn-mode-move" class="mode-tab-btn active">Move</button>
-          <button id="btn-mode-wall" class="mode-tab-btn">Place Wall</button>
-          <button id="btn-rotate-wall" class="mode-tab-btn rotate-btn" style="display: none;">Rotate (H)</button>
+        <div class="header-right-actions">
+          <button id="btn-toggle-scoreboard" class="btn-scoreboard-pill" title="View Room Scoreboard">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 5px;">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path>
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path>
+              <path d="M4 22h16"></path>
+              <path d="M10 14.66V17c0 .55-.45 1-1 1H7c-.55 0-1-.45-1-1v-2.34"></path>
+              <path d="M18 14.66V17c0 .55-.45 1-1 1h-2c-.55 0-1-.45-1-1v-2.34"></path>
+              <path d="M14 22v-5"></path>
+              <path d="M10 22v-5"></path>
+              <path d="M12 2v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V2z"></path>
+            </svg>
+            <span>Scores</span>
+          </button>
+          <div class="action-mode-selector">
+            <button id="btn-mode-move" class="mode-tab-btn active">Move</button>
+            <button id="btn-mode-wall" class="mode-tab-btn">Place Wall</button>
+            <button id="btn-rotate-wall" class="mode-tab-btn rotate-btn" style="display: none;">Rotate (H)</button>
+          </div>
         </div>
       </div>
 
@@ -283,7 +298,42 @@
             <span class="hint-mobile"><span class="key-cap">Tap</span> Move Piece</span>
           </div>
         </div>
+
+        <!-- Right Game Realtime Chat Sidebar -->
+        <aside id="game-chat-sidebar" class="game-chat-sidebar">
+          <div class="chat-sidebar-header">
+            <div class="chat-title">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 6px;">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>GAME CHAT</span>
+            </div>
+            <button id="btn-chat-close-mobile" class="btn-chat-close-mobile" title="Close Chat" aria-label="Close Chat">&times;</button>
+          </div>
+          <div id="chat-messages-container" class="chat-messages-container">
+            <div class="chat-system-message">Game chat started! Chat is cleared when the game ends.</div>
+          </div>
+          <form id="chat-form" class="chat-input-wrapper">
+            <input type="text" id="chat-input-field" class="chat-input-field" placeholder="Type message..." maxlength="150" autocomplete="off" />
+            <button type="submit" id="btn-chat-send" class="btn-chat-send" title="Send message">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          </form>
+          <div id="chat-anti-spam-warning" class="chat-anti-spam-warning" style="display: none;">Slow down! Anti-spam cooldown active.</div>
+        </aside>
       </div>
+
+      <!-- Mobile Floating Chat Toggle Button & Backdrop -->
+      <button id="btn-mobile-chat-toggle" class="btn-mobile-chat-toggle" title="Open Game Chat" aria-label="Open Game Chat">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+        <span id="chat-unread-badge" class="chat-unread-badge" style="display: none;">0</span>
+      </button>
+      <div id="chat-mobile-backdrop" class="chat-mobile-backdrop" style="display: none;"></div>
     </div>
   </div>
 
@@ -399,6 +449,17 @@
       <h2 id="winner-title" class="title-glow">Victory!</h2>
       <p id="winner-subtitle" class="subtitle">Player reached the golden center goal!</p>
 
+      <!-- Match Standings / Scoreboard Section (1st, 2nd, 3rd, 4th) -->
+      <div id="victory-scoreboard-section" class="victory-scoreboard-section">
+        <div class="scoreboard-section-header">
+          <span class="scoreboard-trophy-icon">🏆</span>
+          <span class="scoreboard-section-heading">MATCH RANKINGS</span>
+        </div>
+        <div id="victory-scoreboard-list" class="scoreboard-ranking-list">
+          <!-- Populated dynamically via ScoreboardManager with 1st, 2nd, 3rd, 4th -->
+        </div>
+      </div>
+
       <!-- Post-Match Player Status Section -->
       <div class="input-group" style="margin-top: 1rem; margin-bottom: 1rem;">
         <label id="victory-waiting-label"
@@ -415,13 +476,29 @@
     </div>
   </div>
 
+  <!-- =========================================================================
+       SCOREBOARD MODAL (Accessible mid-game / anytime via header button)
+       ========================================================================= -->
+  <div id="modal-scoreboard" class="modal-overlay">
+    <div class="glass-card scoreboard-card">
+      <div class="scoreboard-modal-header">
+        <h2 class="title-glow" style="margin-bottom: 0.25rem;">🏆 Room Scoreboard</h2>
+        <p class="subtitle" style="margin-bottom: 1rem;">Cumulative rankings across matches in this room</p>
+      </div>
+      <div id="modal-scoreboard-list" class="scoreboard-ranking-list modal-list">
+        <!-- Populated dynamically -->
+      </div>
+      <button id="btn-close-scoreboard" class="btn-secondary" style="width: 100%; margin-top: 1rem;">Close</button>
+    </div>
+  </div>
+
   <!-- Canvas for Confetti -->
   <canvas id="confetti-canvas"></canvas>
 
   <!-- JS Game Engines -->
-  <script src="js/supabase-config.js?v=3.5"></script>
-  <script src="js/pathfinding.js?v=3.5"></script>
-  <script src="js/game.js?v=3.5"></script>
+  <script src="js/supabase-config.js?v=3.6"></script>
+  <script src="js/pathfinding.js?v=3.6"></script>
+  <script src="js/game.js?v=3.6"></script>
 </body>
 
 </html>

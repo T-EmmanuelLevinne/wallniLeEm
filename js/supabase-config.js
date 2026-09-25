@@ -117,6 +117,15 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'room_reconnect_query' }, ({ payload }) => {
       if (callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
     })
+    .on('broadcast', { event: 'chat_message' }, ({ payload }) => {
+      if (callbacks.onChatMessage) callbacks.onChatMessage(payload);
+    })
+    .on('broadcast', { event: 'player_kicked' }, ({ payload }) => {
+      if (callbacks.onPlayerKicked) callbacks.onPlayerKicked(payload);
+    })
+    .on('broadcast', { event: 'room_join_rejected' }, ({ payload }) => {
+      if (callbacks.onRoomJoinRejected) callbacks.onRoomJoinRejected(payload);
+    })
     .on('presence', { event: 'sync' }, () => {
       if (callbacks.onPresenceSync && currentChannel) {
         try {
@@ -175,6 +184,9 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'istaroth_reverse_time' && callbacks.onIstarothReverseTime) callbacks.onIstarothReverseTime(payload);
     if (type === 'istaroth_erasure' && callbacks.onIstarothErasure) callbacks.onIstarothErasure(payload);
     if (type === 'room_reconnect_query' && callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
+    if (type === 'chat_message' && callbacks.onChatMessage) callbacks.onChatMessage(payload);
+    if (type === 'player_kicked' && callbacks.onPlayerKicked) callbacks.onPlayerKicked(payload);
+    if (type === 'room_join_rejected' && callbacks.onRoomJoinRejected) callbacks.onRoomJoinRejected(payload);
   };
 
   setTimeout(() => {
