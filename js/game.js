@@ -5087,6 +5087,69 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function ensureErasureCountdownMode(overlay) {
+    if (!overlay) return;
+    overlay.classList.add('countdown-mode');
+
+    // Remove Phase 1 & 2 center-blocking elements so board and characters are 100% visible
+    const vortex = overlay.querySelector('.erasure-celestial-vortex');
+    if (vortex) vortex.remove();
+    const godRays = overlay.querySelector('.celestial-god-rays');
+    if (godRays) godRays.remove();
+    const veil = overlay.querySelector('.celestial-starlight-veil');
+    if (veil) veil.remove();
+    const flash = overlay.querySelector('.erasure-supernova-flash');
+    if (flash) flash.remove();
+    const banner = document.getElementById('erasure-banner-container');
+    if (banner) banner.remove();
+    const stillness = document.getElementById('erasure-stillness-phase');
+    if (stillness) stillness.remove();
+  }
+
+  function triggerErasureTickVisual(overlay, tickNum) {
+    if (!overlay) return;
+    ensureErasureCountdownMode(overlay);
+
+    const counterEl = document.getElementById('erasure-tick-counter');
+    if (counterEl && tickNum !== undefined) {
+      counterEl.textContent = `${tickNum}s`;
+      counterEl.classList.remove('tick-punch');
+      void counterEl.offsetWidth;
+      counterEl.classList.add('tick-punch');
+    }
+
+    if (boardGrid) {
+      boardGrid.classList.remove('erasure-grid-fracture');
+      void boardGrid.offsetWidth;
+      boardGrid.classList.add('erasure-grid-fracture');
+    }
+
+    // Time-spinning visual is only visible when the time is ticking (flashes during tick and fades out)
+    const existingBursts = overlay.querySelectorAll('.erasure-tick-spin-burst');
+    existingBursts.forEach(b => b.remove());
+
+    const burst = document.createElement('div');
+    burst.className = 'erasure-tick-spin-burst';
+    burst.innerHTML = `
+      <svg viewBox="0 0 400 400" style="width: 100%; height: 100%;">
+        <circle cx="200" cy="200" r="185" fill="none" stroke="#f59e0b" stroke-width="2.5" stroke-dasharray="14 6 2 6" opacity="0.8" />
+        <circle cx="200" cy="200" r="150" fill="none" stroke="#38bdf8" stroke-width="2" stroke-dasharray="8 4" opacity="0.75" />
+        <circle cx="200" cy="200" r="110" fill="none" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="5 5" opacity="0.7" />
+        <text x="200" y="55" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="20">XII</text>
+        <text x="345" y="207" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="20">III</text>
+        <text x="200" y="360" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="20">VI</text>
+        <text x="55" y="207" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="20">IX</text>
+        <polygon points="200,60 230,170 340,200 230,230 200,340 170,230 60,200 170,170" fill="rgba(253, 224, 71, 0.05)" stroke="#fde047" stroke-width="2" opacity="0.85" />
+        <polygon points="200,85 220,180 315,200 220,220 200,315 180,220 85,200 180,180" fill="none" stroke="#38bdf8" stroke-width="1.5" opacity="0.8" />
+        <circle cx="200" cy="200" r="16" fill="#ffffff" filter="drop-shadow(0 0 12px #38bdf8)" />
+      </svg>
+    `;
+    overlay.appendChild(burst);
+    setTimeout(() => {
+      if (burst.parentNode) burst.remove();
+    }, 450);
+  }
+
   function performIstarothErasureSequence(casterId, isAuthoritative = true) {
     if (isErasureActive) return;
     cancelActiveErasureSequence();
@@ -5169,16 +5232,24 @@ document.addEventListener('DOMContentLoaded', () => {
     // PHASE 3 (5.5s to 13.5s):
     // Players teleport everywhere on grid every 1 second, lasting 8 seconds.
     // timetick.mp3 plays for 8 seconds.
+    // Center blocking vortex & dark blur are removed so characters are clearly visible.
+    // Spinning time effect is only visible when the time is ticking.
     // ------------------------------------------------------------------------
     erasureStillnessTimeout = setTimeout(() => {
-      const stillnessEl = document.getElementById('erasure-stillness-phase');
-      if (stillnessEl) stillnessEl.remove();
+      ensureErasureCountdownMode(overlay);
 
       erasureAudioTick = playAudio('audio/timetick.mp3', 1.0);
 
       const indicator = document.createElement('div');
       indicator.className = 'erasure-teleport-indicator';
       indicator.innerHTML = `
+        <div class="erasure-mini-spin-glyph">
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <circle cx="12" cy="12" r="10" fill="none" stroke="#fde047" stroke-width="2" stroke-dasharray="6 2" />
+            <polygon points="12,3 14,9 20,12 14,15 12,21 10,15 4,12 10,9" fill="#38bdf8" />
+            <circle cx="12" cy="12" r="2.5" fill="#ffffff" />
+          </svg>
+        </div>
         <span class="erasure-tick-text">Timeline Collapse</span>
         <span id="erasure-tick-counter" class="erasure-tick-seconds">8s</span>
       `;
@@ -5190,62 +5261,55 @@ document.addEventListener('DOMContentLoaded', () => {
       function performOneTeleportTick() {
         if (!isErasureActive) return;
 
-        const counterEl = document.getElementById('erasure-tick-counter');
-        if (counterEl) counterEl.textContent = `${ticksRemaining}s`;
-
-        if (boardGrid) {
-          boardGrid.classList.remove('erasure-grid-fracture');
-          void boardGrid.offsetWidth;
-          boardGrid.classList.add('erasure-grid-fracture');
-        }
-
-        const activePlayers = roomState.players.filter(p => !p.burnedOut && p.pos);
-        const occupiedCoords = new Set();
-        const updatedPositions = [];
-
-        activePlayers.forEach(p => {
-          const oldPos = { r: p.pos.r, c: p.pos.c };
-
-          const oldCell = getCellElem(oldPos.r, oldPos.c);
-          if (oldCell) {
-            const echo = document.createElement('div');
-            echo.className = 'celestial-glitch-echo';
-            oldCell.appendChild(echo);
-            setTimeout(() => echo.remove(), 750);
-          }
-
-          let attempts = 0;
-          let newR = Math.floor(Math.random() * gSize);
-          let newC = Math.floor(Math.random() * gSize);
-          let key = `${newR},${newC}`;
-
-          while (attempts < 30 && (occupiedCoords.has(key) || (newR === oldPos.r && newC === oldPos.c))) {
-            newR = Math.floor(Math.random() * gSize);
-            newC = Math.floor(Math.random() * gSize);
-            key = `${newR},${newC}`;
-            attempts++;
-          }
-
-          occupiedCoords.add(key);
-          p.pos = { r: newR, c: newC };
-          if (p.id === playerProfile.id) {
-            playerProfile.pos = { r: newR, c: newC };
-          }
-
-          const newCell = getCellElem(newR, newC);
-          if (newCell) {
-            const strike = document.createElement('div');
-            strike.className = 'celestial-teleport-strike';
-            newCell.appendChild(strike);
-            setTimeout(() => strike.remove(), 850);
-          }
-
-          updatedPositions.push({ id: p.id, pos: { r: newR, c: newC } });
-        });
-
-        renderBoardState();
+        triggerErasureTickVisual(overlay, ticksRemaining);
 
         if (isAuthoritative) {
+          const activePlayers = roomState.players.filter(p => !p.burnedOut && p.pos);
+          const occupiedCoords = new Set();
+          const updatedPositions = [];
+
+          activePlayers.forEach(p => {
+            const oldPos = { r: p.pos.r, c: p.pos.c };
+
+            const oldCell = getCellElem(oldPos.r, oldPos.c);
+            if (oldCell) {
+              const echo = document.createElement('div');
+              echo.className = 'celestial-glitch-echo';
+              oldCell.appendChild(echo);
+              setTimeout(() => echo.remove(), 750);
+            }
+
+            let attempts = 0;
+            let newR = Math.floor(Math.random() * gSize);
+            let newC = Math.floor(Math.random() * gSize);
+            let key = `${newR},${newC}`;
+
+            while (attempts < 30 && (occupiedCoords.has(key) || (newR === oldPos.r && newC === oldPos.c))) {
+              newR = Math.floor(Math.random() * gSize);
+              newC = Math.floor(Math.random() * gSize);
+              key = `${newR},${newC}`;
+              attempts++;
+            }
+
+            occupiedCoords.add(key);
+            p.pos = { r: newR, c: newC };
+            if (p.id === playerProfile.id) {
+              playerProfile.pos = { r: newR, c: newC };
+            }
+
+            const newCell = getCellElem(newR, newC);
+            if (newCell) {
+              const strike = document.createElement('div');
+              strike.className = 'celestial-teleport-strike';
+              newCell.appendChild(strike);
+              setTimeout(() => strike.remove(), 850);
+            }
+
+            updatedPositions.push({ id: p.id, pos: { r: newR, c: newC } });
+          });
+
+          renderBoardState();
+
           broadcastEvent('istaroth_erasure', {
             type: 'teleport_tick',
             tick: ticksRemaining,
@@ -5327,9 +5391,22 @@ document.addEventListener('DOMContentLoaded', () => {
     if (payload.type === 'start') {
       performIstarothErasureSequence(payload.casterId, false);
     } else if (payload.type === 'teleport_tick' && payload.positions) {
+      const overlay = document.querySelector('.istaroth-erasure-vfx-overlay');
+      if (overlay) {
+        triggerErasureTickVisual(overlay, payload.tick);
+      }
       payload.positions.forEach(item => {
         const p = roomState.players.find(pl => pl.id === item.id);
         if (p && item.pos) {
+          if (p.pos) {
+            const oldCell = getCellElem(p.pos.r, p.pos.c);
+            if (oldCell) {
+              const echo = document.createElement('div');
+              echo.className = 'celestial-glitch-echo';
+              oldCell.appendChild(echo);
+              setTimeout(() => echo.remove(), 750);
+            }
+          }
           p.pos = { r: item.pos.r, c: item.pos.c };
           if (p.id === playerProfile.id) {
             playerProfile.pos = { r: item.pos.r, c: item.pos.c };
