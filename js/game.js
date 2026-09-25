@@ -776,6 +776,11 @@ document.addEventListener('DOMContentLoaded', () => {
     showToast(`Kicked ${targetName || 'player'}.`, 'neutral');
 
     if (roomState.gameStarted) {
+      if (roomState.players.length <= 1) {
+        broadcastEvent('game_terminated', { reason: 'No players remaining in match. Game terminated.' });
+        terminateAndReturnToInvite('No players remaining. Game terminated.');
+        return;
+      }
       renderBoardState();
       renderGamePlayersList();
       updateTurnHeaderUI();
@@ -1718,6 +1723,10 @@ document.addEventListener('DOMContentLoaded', () => {
         roomState.players = roomState.players.filter(p => p.id !== payload.targetId);
         showToast(`${payload.targetName || 'A player'} was kicked by the host.`, 'neutral');
         if (roomState.gameStarted) {
+          if (roomState.players.length <= 1) {
+            terminateAndReturnToInvite('No players remaining in match. Game terminated.');
+            return;
+          }
           renderBoardState();
           renderGamePlayersList();
           updateTurnHeaderUI();
