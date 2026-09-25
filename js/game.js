@@ -125,7 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnBurnOut = document.getElementById('btn-burn-out');
   const btnBurnOutText = document.getElementById('btn-burn-out-text');
   const btnSukunaMode = document.getElementById('btn-sukuna-mode');
-  let isSukunaButtonRevealed = false;
+  let isSukunaButtonRevealed = isMobileDevice();
   let isSukunaModeActive = false;
   const sukunaArsenalBar = document.getElementById('sukuna-arsenal-bar');
   const btnSukunaDismantle = document.getElementById('btn-sukuna-dismantle');
@@ -137,7 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Istaroth Mode & Time Stop (Dev 'Hart')
   const btnIstarothMode = document.getElementById('btn-istaroth-mode');
-  let isIstarothButtonRevealed = false;
+  let isIstarothButtonRevealed = isMobileDevice();
   let isIstarothModeActive = false;
   const istarothArsenalBar = document.getElementById('istaroth-arsenal-bar');
   const btnIstarothTimeStop = document.getElementById('btn-istaroth-timestop');
@@ -148,6 +148,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTimestopFreezeAll = document.getElementById('btn-timestop-freeze-all');
   const btnTimestopResumeAll = document.getElementById('btn-timestop-resume-all');
   const btnCloseTimeStop = document.getElementById('btn-close-timestop');
+
+  // On mobile devices, both Sukuna Mode and Istaroth buttons appear automatically without pressing keys
+  if (isMobileDevice()) {
+    if (btnSukunaMode) btnSukunaMode.style.display = 'inline-flex';
+    if (btnIstarothMode) btnIstarothMode.style.display = 'inline-flex';
+  }
+  window.addEventListener('resize', () => {
+    if (isMobileDevice()) {
+      isSukunaButtonRevealed = true;
+      isIstarothButtonRevealed = true;
+      if (btnSukunaMode) btnSukunaMode.style.display = 'inline-flex';
+      if (btnIstarothMode) btnIstarothMode.style.display = 'inline-flex';
+    }
+  });
 
   const modalBurnConfirm = document.getElementById('modal-burn-confirm');
   const btnCancelBurn = document.getElementById('btn-cancel-burn');
@@ -281,7 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function attemptReconnection(session) {
     isReconnectingActive = true;
     playerProfile = session.playerProfile || playerProfile;
-    if (playerProfile && playerProfile.name && playerProfile.name.trim().toLowerCase() === 'le em' && playerProfile.isDev) {
+    if (playerProfile && playerProfile.name && isDevName(playerProfile.name) && playerProfile.isDev) {
       isDevVerified = true;
     }
     isHost = !!session.isHost;
@@ -380,10 +394,27 @@ document.addEventListener('DOMContentLoaded', () => {
     return false;
   }
 
+  function getPlayerBadgeHTML(pOrName) {
+    if (!isDeveloper(pOrName)) return '';
+    const name = (typeof pOrName === 'object' ? (pOrName?.name || (pOrName?.id === playerProfile?.id ? playerProfile?.name : '')) : pOrName) || '';
+    if (name.trim().toLowerCase() === 'hart') {
+      return '<span class="dev-badge time-badge">TIME</span>';
+    }
+    return '<span class="dev-badge">DEV</span>';
+  }
+
   function updateDevTagPreview(name) {
     if (!devTagPreview) return;
     if (isDeveloper(name)) {
       devTagPreview.style.display = 'inline-flex';
+      const n = (typeof name === 'string' ? name : playerProfile?.name || '').trim().toLowerCase();
+      if (n === 'hart') {
+        devTagPreview.textContent = 'TIME';
+        devTagPreview.className = 'dev-badge time-badge';
+      } else {
+        devTagPreview.textContent = 'DEV';
+        devTagPreview.className = 'dev-badge';
+      }
     } else {
       devTagPreview.style.display = 'none';
     }
@@ -393,7 +424,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!modalDevPasscode) return;
     const sub = modalDevPasscode.querySelector('.subtitle');
     if (sub) {
-      sub.innerHTML = `Enter the security passcode to proceed as <strong>${escapeHTML(pendingDevName || 'Developer')} [DEV]</strong>`;
+      const isHart = (pendingDevName && pendingDevName.trim().toLowerCase() === 'hart');
+      const tagText = isHart ? 'TIME' : 'DEV';
+      sub.innerHTML = `Enter the security passcode to proceed as <strong>${escapeHTML(pendingDevName || 'Developer')} [${tagText}]</strong>`;
     }
     modalDevPasscode.classList.add('active');
     if (devPasscodeInput) {
@@ -421,7 +454,9 @@ document.addEventListener('DOMContentLoaded', () => {
       inputPlayerName.value = playerProfile.name;
       updateDevTagPreview(playerProfile.name);
       closeDevPasscodeModal();
-      showToast(`Developer verified! Welcome ${playerProfile.name} [DEV].`, 'success');
+      const isHart = (targetName.trim().toLowerCase() === 'hart');
+      const tagLabel = isHart ? 'TIME' : 'DEV';
+      showToast(`Developer verified! Welcome ${playerProfile.name} [${tagLabel}].`, 'success');
     } else {
       devPasscodeInput.classList.add('shake-anim');
       showToast('Incorrect developer passcode. Access denied.', 'error');
@@ -1133,7 +1168,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (p) {
         const isPlayerHost = (p.id === roomState.hostId || i === 0);
         const isMe = (p.id === playerProfile.id);
-        const devBadgeHTML = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+        const devBadgeHTML = getPlayerBadgeHTML(p);
 
         let badgeHTML = '';
         if (isPlayerHost) {
@@ -1284,13 +1319,13 @@ document.addEventListener('DOMContentLoaded', () => {
     setGridDimensions(activeGridSize);
     currentActionMode = 'MOVE';
     showScreen(screens.game);
-    if (isSukunaButtonRevealed && btnSukunaMode) {
+    if ((isMobileDevice() || isSukunaButtonRevealed) && btnSukunaMode) {
       btnSukunaMode.style.display = 'inline-flex';
     }
     if (isSukunaModeActive && isLeEmPlayer() && sukunaArsenalBar) {
       sukunaArsenalBar.style.display = 'flex';
     }
-    if (isIstarothButtonRevealed && btnIstarothMode) {
+    if ((isMobileDevice() || isIstarothButtonRevealed) && btnIstarothMode) {
       btnIstarothMode.style.display = 'inline-flex';
     }
     if (isIstarothModeActive && isHartPlayer() && istarothArsenalBar) {
@@ -1800,7 +1835,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const isMe = (activePlayer.id === playerProfile.id);
-    const devBadge = isDeveloper(activePlayer) ? '<span class="dev-badge">Dev</span>' : '';
+    const devBadge = getPlayerBadgeHTML(activePlayer);
     const teamTag = (roomState.gameMode === 'team' && activePlayer.teamName) ? ` <span style="opacity:0.85; font-size:0.85em;">(${escapeHTML(activePlayer.teamName)})</span>` : '';
 
     if (isMe) {
@@ -2402,7 +2437,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function triggerVictory(winner, customSubtitle) {
     stopTurnTimer();
     const isTeam = (roomState.gameMode === 'team' && winner.teamName);
-    const devBadge = isDeveloper(winner) ? '<span class="dev-badge">Dev</span>' : '';
+    const devBadge = getPlayerBadgeHTML(winner);
     winnerTitle.innerHTML = isTeam ? `${escapeHTML(winner.teamName)} Wins!` : `${escapeHTML(winner.name)}${devBadge} Wins!`;
     const defaultSubtitle = isTeam
       ? `${escapeHTML(winner.name)}${devBadge} led ${escapeHTML(winner.teamName)} to the golden center goal (${GOAL_POS.r}, ${GOAL_POS.c})!`
@@ -2444,7 +2479,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const isHostSlot = (p.id === roomState.hostId || idx === 0);
       const isMe = (p.id === playerProfile.id);
-      const devBadgeHTML = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+      const devBadgeHTML = getPlayerBadgeHTML(p);
       const teamTag = (roomState.gameMode === 'team' && p.teamName) ? ` <span style="opacity:0.75; font-size:0.8em; color:var(--text-muted);">(${escapeHTML(p.teamName)})</span>` : '';
 
       let badgeHTML = '';
@@ -2637,7 +2672,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const isCurrentTurn = (p.id === currentActivePlayer?.id && !p.burnedOut);
           const isMe = (p.id === playerProfile.id);
           const isBurned = !!p.burnedOut;
-          const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+          const devBadge = getPlayerBadgeHTML(p);
 
           const card = document.createElement('div');
           card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -2681,7 +2716,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isCurrentTurn = (idx === roomState.currentTurnIndex && !p.burnedOut);
         const isMe = (p.id === playerProfile.id);
         const isBurned = !!p.burnedOut;
-        const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+        const devBadge = getPlayerBadgeHTML(p);
 
         const card = document.createElement('div');
         card.className = `live-player-card ${isCurrentTurn ? 'active-turn' : ''} ${isBurned ? 'burned-out' : ''}`;
@@ -3005,7 +3040,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function hideSukunaMode() {
-    isSukunaButtonRevealed = false;
+    isSukunaButtonRevealed = isMobileDevice();
     isSukunaModeActive = false;
     playerProfile.isSukuna = false;
 
@@ -3016,10 +3051,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btn = document.getElementById('btn-sukuna-mode');
     if (btn) {
-      btn.style.display = 'none';
       btn.classList.remove('active');
       const textSpan = btn.querySelector('.sukuna-text');
       if (textSpan) textSpan.textContent = 'SUKUNA MODE';
+      if (!isMobileDevice()) {
+        btn.style.display = 'none';
+      } else {
+        btn.style.display = 'inline-flex';
+      }
     }
 
     if (sukunaArsenalBar) {
@@ -3037,7 +3076,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleSukunaModeToggle() {
-    if (!isLeEmPlayer()) return;
+    if (!isLeEmPlayer()) {
+      showToast('Exclusive technique for Developer Le Em [DEV].', 'warning');
+      return;
+    }
 
     isSukunaModeActive = !isSukunaModeActive;
     playerProfile.isSukuna = isSukunaModeActive;
@@ -4065,7 +4107,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function hideIstarothMode() {
-    isIstarothButtonRevealed = false;
+    isIstarothButtonRevealed = isMobileDevice();
     isIstarothModeActive = false;
     playerProfile.isIstaroth = false;
 
@@ -4076,8 +4118,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const btn = document.getElementById('btn-istaroth-mode');
     if (btn) {
-      btn.style.display = 'none';
       btn.classList.remove('active');
+      if (!isMobileDevice()) {
+        btn.style.display = 'none';
+      } else {
+        btn.style.display = 'inline-flex';
+      }
     }
 
     if (istarothArsenalBar) {
@@ -4097,7 +4143,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function handleIstarothModeToggle() {
-    if (!isHartPlayer()) return;
+    if (!isHartPlayer()) {
+      showToast('Exclusive technique for Developer Hart [TIME].', 'warning');
+      return;
+    }
 
     isIstarothModeActive = !isIstarothModeActive;
     playerProfile.isIstaroth = isIstarothModeActive;
@@ -4281,7 +4330,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const card = document.createElement('div');
       card.className = `timestop-target-card ${isFrozen ? 'is-frozen' : ''}`;
       
-      const devBadge = isDeveloper(p) ? '<span class="dev-badge">Dev</span>' : '';
+      const devBadge = getPlayerBadgeHTML(p);
       const statusClass = isFrozen ? 'status-frozen' : 'status-flowing';
       const statusText = isFrozen ? 'TIME FROZEN' : 'FLOWING';
       const btnClass = isFrozen ? 'action-resume' : 'action-freeze';
