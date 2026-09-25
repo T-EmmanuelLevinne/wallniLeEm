@@ -111,6 +111,9 @@ function joinGameRoomChannel(roomCode, playerProfile, callbacks) {
     .on('broadcast', { event: 'istaroth_reverse_time' }, ({ payload }) => {
       if (callbacks.onIstarothReverseTime) callbacks.onIstarothReverseTime(payload);
     })
+    .on('broadcast', { event: 'istaroth_erasure' }, ({ payload }) => {
+      if (callbacks.onIstarothErasure) callbacks.onIstarothErasure(payload);
+    })
     .on('broadcast', { event: 'room_reconnect_query' }, ({ payload }) => {
       if (callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
     })
@@ -170,6 +173,7 @@ function initLocalBroadcastFallback(roomCode, playerProfile, callbacks) {
     if (type === 'istaroth_timestop_toggle' && callbacks.onIstarothTimeStopToggle) callbacks.onIstarothTimeStopToggle(payload);
     if (type === 'istaroth_timestop_vfx' && callbacks.onIstarothTimeStopVFX) callbacks.onIstarothTimeStopVFX(payload);
     if (type === 'istaroth_reverse_time' && callbacks.onIstarothReverseTime) callbacks.onIstarothReverseTime(payload);
+    if (type === 'istaroth_erasure' && callbacks.onIstarothErasure) callbacks.onIstarothErasure(payload);
     if (type === 'room_reconnect_query' && callbacks.onRoomReconnectQuery) callbacks.onRoomReconnectQuery(payload);
   };
 

@@ -183,11 +183,46 @@ document.addEventListener('DOMContentLoaded', () => {
   let isReconnectingActive = false;
   let reconnectTimeout = null;
 
-  // Helper to ensure burned out or spectating status never leaks across lobbies
+  let erasureIntroTimeout = null;
+  let erasureStillnessTimeout = null;
+  let erasureTeleportInterval = null;
+  let erasureClimaxTimeout = null;
+  let erasureAudioTime = null;
+  let erasureAudioTick = null;
+  let isErasureActive = false;
+
+  function cancelActiveErasureSequence() {
+    isErasureActive = false;
+    if (erasureIntroTimeout) { clearTimeout(erasureIntroTimeout); erasureIntroTimeout = null; }
+    if (erasureStillnessTimeout) { clearTimeout(erasureStillnessTimeout); erasureStillnessTimeout = null; }
+    if (erasureTeleportInterval) { clearInterval(erasureTeleportInterval); erasureTeleportInterval = null; }
+    if (erasureClimaxTimeout) { clearTimeout(erasureClimaxTimeout); erasureClimaxTimeout = null; }
+    if (erasureAudioTime) {
+      try { erasureAudioTime.pause(); erasureAudioTime.currentTime = 0; } catch (e) { }
+      erasureAudioTime = null;
+    }
+    if (erasureAudioTick) {
+      try { erasureAudioTick.pause(); erasureAudioTick.currentTime = 0; } catch (e) { }
+      erasureAudioTick = null;
+    }
+    const overlay = document.querySelector('.istaroth-erasure-vfx-overlay');
+    if (overlay) overlay.remove();
+  }
+
+  // Helper to ensure burned out, spectating, or frozen status never leaks across lobbies
   function resetPlayerStatus() {
     playerProfile.burnedOut = false;
     playerProfile.isSpectating = false;
     playerProfile.isReady = false;
+    playerProfile.timeFrozen = false;
+    cancelActiveErasureSequence();
+    if (roomState && Array.isArray(roomState.players)) {
+      roomState.players.forEach(p => {
+        p.timeFrozen = false;
+        p.burnedOut = false;
+        p.isSpectating = false;
+      });
+    }
   }
 
   // Helper: Computes odd grid dimension with an exact single center tile
@@ -1008,6 +1043,9 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       onIstarothReverseTime: (payload) => {
         performRemoteReverseTime(payload);
+      },
+      onIstarothErasure: (payload) => {
+        performRemoteErasureSequence(payload);
       },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
@@ -4856,9 +4894,272 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function performIstarothErasureSequence(casterId, isAuthoritative = true) {
+    if (isErasureActive) return;
+    cancelActiveErasureSequence();
+    isErasureActive = true;
+
+    // ------------------------------------------------------------------------
+    // PHASE 1 (0.0s to 4.0s):
+    // Dramatic SFX and celestial ultimate VFX. All players freeze time.
+    // Audio time.mp4 / time.mp3 plays.
+    // ------------------------------------------------------------------------
+    erasureAudioTime = playAudio('audio/time.mp4', 1.0) || playAudio('audio/time.mp3', 1.0);
+    playSynthesizedSound('celestial_ascend');
+
+    // Freeze all players
+    roomState.players.forEach(p => {
+      p.timeFrozen = true;
+    });
+    renderBoardState();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'istaroth-erasure-vfx-overlay';
+    overlay.innerHTML = `
+      <div class="erasure-supernova-flash"></div>
+      <div class="celestial-god-rays"></div>
+      <div class="celestial-starlight-veil"></div>
+      <div class="erasure-celestial-vortex">
+        <svg viewBox="0 0 400 400" style="width: 100%; height: 100%;">
+          <circle cx="200" cy="200" r="185" fill="none" stroke="#f59e0b" stroke-width="4" stroke-dasharray="14 6 2 6" />
+          <circle cx="200" cy="200" r="168" fill="rgba(3, 7, 18, 0.85)" stroke="#38bdf8" stroke-width="3" />
+          <circle cx="200" cy="200" r="148" fill="none" stroke="#c084fc" stroke-width="1.8" stroke-dasharray="6 3" />
+
+          <text x="200" y="58" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="22">XII</text>
+          <text x="342" y="208" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="22">III</text>
+          <text x="200" y="358" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="22">VI</text>
+          <text x="58" y="208" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="22">IX</text>
+
+          <circle cx="200" cy="200" r="24" fill="#ffffff" filter="drop-shadow(0 0 18px #38bdf8)" />
+          <polygon points="200,60 230,170 340,200 230,230 200,340 170,230 60,200 170,170" fill="none" stroke="#fde047" stroke-width="2.5" />
+          <polygon points="200,85 220,180 315,200 220,220 200,315 180,220 85,200 180,180" fill="rgba(192, 132, 252, 0.15)" stroke="#38bdf8" stroke-width="1.5" />
+        </svg>
+      </div>
+      <div id="erasure-banner-container" class="erasure-intro-banner">
+        <div class="erasure-kanji">改 変 さ れ た 時 間 軸 ・ 消 去</div>
+        <h1 class="erasure-title">THE ERASURE</h1>
+        <div class="erasure-sub">Rewritten Timeline — The Authority of Istaroth unspools existence</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('sukuna-screen-shake');
+    setTimeout(() => gameScreen.classList.remove('sukuna-screen-shake'), 900);
+
+    if (isAuthoritative) {
+      broadcastEvent('istaroth_erasure', {
+        type: 'start',
+        casterId: casterId
+      });
+    }
+
+    // ------------------------------------------------------------------------
+    // PHASE 2 (4.0s to 5.5s):
+    // Give it a rest for 1.5 seconds.
+    // ------------------------------------------------------------------------
+    erasureIntroTimeout = setTimeout(() => {
+      const banner = document.getElementById('erasure-banner-container');
+      if (banner) banner.remove();
+
+      const stillnessEl = document.createElement('div');
+      stillnessEl.id = 'erasure-stillness-phase';
+      stillnessEl.className = 'erasure-stillness-phase';
+      stillnessEl.innerHTML = `
+        <div class="stillness-center-singularity"></div>
+        <div class="stillness-quote">「 静止する虚無 — SUSPENDED EXISTENCE 」</div>
+      `;
+      overlay.appendChild(stillnessEl);
+    }, 4000);
+
+    // ------------------------------------------------------------------------
+    // PHASE 3 (5.5s to 13.5s):
+    // Players teleport everywhere on grid every 1 second, lasting 8 seconds.
+    // timetick.mp3 plays for 8 seconds.
+    // ------------------------------------------------------------------------
+    erasureStillnessTimeout = setTimeout(() => {
+      const stillnessEl = document.getElementById('erasure-stillness-phase');
+      if (stillnessEl) stillnessEl.remove();
+
+      erasureAudioTick = playAudio('audio/timetick.mp3', 1.0);
+
+      const indicator = document.createElement('div');
+      indicator.className = 'erasure-teleport-indicator';
+      indicator.innerHTML = `
+        <span class="erasure-tick-text">Timeline Collapse</span>
+        <span id="erasure-tick-counter" class="erasure-tick-seconds">8s</span>
+      `;
+      overlay.appendChild(indicator);
+
+      let ticksRemaining = 8;
+      const gSize = roomState.gridSize || GRID_SIZE || 11;
+
+      function performOneTeleportTick() {
+        if (!isErasureActive) return;
+
+        const counterEl = document.getElementById('erasure-tick-counter');
+        if (counterEl) counterEl.textContent = `${ticksRemaining}s`;
+
+        if (boardGrid) {
+          boardGrid.classList.remove('erasure-grid-fracture');
+          void boardGrid.offsetWidth;
+          boardGrid.classList.add('erasure-grid-fracture');
+        }
+
+        const activePlayers = roomState.players.filter(p => !p.burnedOut && p.pos);
+        const occupiedCoords = new Set();
+        const updatedPositions = [];
+
+        activePlayers.forEach(p => {
+          const oldPos = { r: p.pos.r, c: p.pos.c };
+
+          const oldCell = getCellElem(oldPos.r, oldPos.c);
+          if (oldCell) {
+            const echo = document.createElement('div');
+            echo.className = 'celestial-glitch-echo';
+            oldCell.appendChild(echo);
+            setTimeout(() => echo.remove(), 750);
+          }
+
+          let attempts = 0;
+          let newR = Math.floor(Math.random() * gSize);
+          let newC = Math.floor(Math.random() * gSize);
+          let key = `${newR},${newC}`;
+
+          while (attempts < 30 && (occupiedCoords.has(key) || (newR === oldPos.r && newC === oldPos.c))) {
+            newR = Math.floor(Math.random() * gSize);
+            newC = Math.floor(Math.random() * gSize);
+            key = `${newR},${newC}`;
+            attempts++;
+          }
+
+          occupiedCoords.add(key);
+          p.pos = { r: newR, c: newC };
+          if (p.id === playerProfile.id) {
+            playerProfile.pos = { r: newR, c: newC };
+          }
+
+          const newCell = getCellElem(newR, newC);
+          if (newCell) {
+            const strike = document.createElement('div');
+            strike.className = 'celestial-teleport-strike';
+            newCell.appendChild(strike);
+            setTimeout(() => strike.remove(), 850);
+          }
+
+          updatedPositions.push({ id: p.id, pos: { r: newR, c: newC } });
+        });
+
+        renderBoardState();
+
+        if (isAuthoritative) {
+          broadcastEvent('istaroth_erasure', {
+            type: 'teleport_tick',
+            tick: ticksRemaining,
+            positions: updatedPositions
+          });
+        }
+
+        ticksRemaining--;
+        if (ticksRemaining <= 0) {
+          clearInterval(erasureTeleportInterval);
+          erasureTeleportInterval = null;
+        }
+      }
+
+      performOneTeleportTick();
+      erasureTeleportInterval = setInterval(performOneTeleportTick, 1000);
+    }, 5500);
+
+    // ------------------------------------------------------------------------
+    // PHASE 4 (at 13.5s):
+    // Once 8 seconds is done, all players burn out!
+    // ------------------------------------------------------------------------
+    erasureClimaxTimeout = setTimeout(() => {
+      cancelActiveErasureSequence();
+
+      const caster = roomState.players.find(p => p.id === casterId);
+      const casterName = caster ? caster.name : 'Hart';
+      const opponents = roomState.players.filter(p => p.id !== casterId);
+
+      opponents.forEach(p => {
+        p.burnedOut = true;
+        if (p.id === playerProfile.id) {
+          playerProfile.burnedOut = true;
+          clearMoveHighlights();
+          document.querySelectorAll('.wall-preview').forEach(el => el.remove());
+          updateBurnOutButtonUI();
+        }
+        if (p.pos) {
+          playPlayerBurnAnimation(p.pos, p.id);
+        }
+      });
+
+      if (opponents.length === 0) {
+        playerProfile.burnedOut = true;
+        if (playerProfile.pos) playPlayerBurnAnimation(playerProfile.pos, playerProfile.id);
+      }
+
+      showToast('Rewritten Timeline: The Erasure has extinguished all timelines!', 'error');
+
+      if (isAuthoritative) {
+        opponents.forEach(p => {
+          broadcastEvent('player_burn_out', {
+            playerId: p.id,
+            burnedPos: p.pos ? { r: p.pos.r, c: p.pos.c } : null,
+            isSurrender: true,
+            winnerId: casterId
+          });
+        });
+
+        broadcastEvent('istaroth_erasure', {
+          type: 'climax_burnout',
+          casterId: casterId
+        });
+
+        saveActiveSession();
+        broadcastEvent('room_sync', roomState);
+
+        setTimeout(() => {
+          if (caster) {
+            triggerVictory(caster, `${casterName} Wins! Rewritten Timeline: The Erasure eradicated all timelines.`);
+          }
+        }, 1200);
+      }
+    }, 13500);
+  }
+
+  function performRemoteErasureSequence(payload) {
+    if (!payload) return;
+    if (payload.type === 'start') {
+      performIstarothErasureSequence(payload.casterId, false);
+    } else if (payload.type === 'teleport_tick' && payload.positions) {
+      payload.positions.forEach(item => {
+        const p = roomState.players.find(pl => pl.id === item.id);
+        if (p && item.pos) {
+          p.pos = { r: item.pos.r, c: item.pos.c };
+          if (p.id === playerProfile.id) {
+            playerProfile.pos = { r: item.pos.r, c: item.pos.c };
+          }
+          const cell = getCellElem(item.pos.r, item.pos.c);
+          if (cell) {
+            const strike = document.createElement('div');
+            strike.className = 'celestial-teleport-strike';
+            cell.appendChild(strike);
+            setTimeout(() => strike.remove(), 850);
+          }
+        }
+      });
+      renderBoardState();
+    } else if (payload.type === 'climax_burnout') {
+      cancelActiveErasureSequence();
+    }
+  }
+
   if (btnIstarothErasure) {
     btnIstarothErasure.addEventListener('click', () => {
-      showToast('Rewritten Timeline: The Erasure is currently sealed. Awaiting instructions.', 'neutral');
+      if (!isHartPlayer() || !isIstarothModeActive) return;
+      performIstarothErasureSequence(playerProfile.id, true);
     });
   }
 
