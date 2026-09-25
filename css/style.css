@@ -2238,24 +2238,23 @@ select.input-field option {
   100% { transform: scale(1); opacity: 1; }
 }
 
-/* Sukuna Transformed Marble Sphere */
+/* Sukuna Transformed Marble Sphere - Keep dev's chosen color, only add tattoo & cursed aura */
 .marble-sphere.sukuna-transformed {
-  background: radial-gradient(circle at 35% 30%, #fecaca 0%, #ef4444 32%, #991b1b 68%, #180305 100%) !important;
   box-shadow: 
-    0 0 20px rgba(220, 38, 38, 0.85),
-    0 0 40px rgba(127, 29, 29, 0.6),
-    inset -4px -4px 10px rgba(0, 0, 0, 0.9),
-    inset 4px 4px 8px rgba(254, 202, 202, 0.55) !important;
+    0 0 16px rgba(255, 0, 51, 0.75),
+    0 0 35px rgba(185, 28, 28, 0.5),
+    inset -4px -4px 8px rgba(0, 0, 0, 0.5),
+    inset 4px 4px 8px rgba(255, 255, 255, 0.4) !important;
   animation: sukuna-cursed-pulse 2s infinite alternate ease-in-out !important;
   z-index: 12 !important;
 }
 
 @keyframes sukuna-cursed-pulse {
   0% {
-    box-shadow: 0 0 18px rgba(220, 38, 38, 0.75), 0 0 35px rgba(127, 29, 29, 0.5), inset -4px -4px 10px rgba(0, 0, 0, 0.85);
+    box-shadow: 0 0 14px rgba(255, 0, 51, 0.65), 0 0 28px rgba(185, 28, 28, 0.4), inset -4px -4px 8px rgba(0, 0, 0, 0.5);
   }
   100% {
-    box-shadow: 0 0 30px rgba(255, 0, 51, 1), 0 0 60px rgba(185, 28, 28, 0.85), inset -4px -4px 10px rgba(0, 0, 0, 0.95);
+    box-shadow: 0 0 24px rgba(255, 0, 51, 0.95), 0 0 45px rgba(220, 38, 38, 0.65), inset -4px -4px 8px rgba(0, 0, 0, 0.6);
   }
 }
 
@@ -2404,11 +2403,11 @@ select.input-field option {
   font-family: var(--font-heading);
   font-size: 2.2rem;
   font-weight: 900;
-  letter-spacing: 0.3em;
+  letter-spacing: 0.12em;
   color: #ff3355;
-  text-shadow: 0 0 15px rgba(255, 0, 51, 0.85);
+  text-shadow: 0 0 15px rgba(255, 0, 51, 0.85), 0 0 30px rgba(220, 38, 38, 0.5);
   margin-top: 0.5rem;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .sukuna-banner-sub {

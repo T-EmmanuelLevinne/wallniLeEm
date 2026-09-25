@@ -2918,7 +2918,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="sukuna-cleave-line sukuna-cleave-3"></div>
       <div class="sukuna-anime-banner">
         <div class="sukuna-banner-kanji">宿 儺</div>
-        <div class="sukuna-banner-title">SUKUNA MODE</div>
+        <div class="sukuna-banner-title">Who's the boss..?</div>
       </div>
     `;
     document.body.appendChild(overlay);
@@ -3451,14 +3451,6 @@ document.addEventListener('DOMContentLoaded', () => {
     casterSpotlight.className = 'domain-caster-spotlight';
     casterSpotlight.style.left = `${casterCenter.x}px`;
     casterSpotlight.style.top = `${casterCenter.y}px`;
-
-    // Clone the caster marble so Le Em's circle player is 100% visible and present above the black fadeout
-    let clonedMarbleHTML = '';
-    if (originalMarble && originalMarble.classList.contains('marble-sphere')) {
-      clonedMarbleHTML = originalMarble.outerHTML;
-    } else {
-      clonedMarbleHTML = '<div class="marble-sphere marble-red player-sukuna-active domain-caster-marble-clone"></div>';
-    }
 
     // Hand sign mudra placed at circle player (Only the hand visible, shrunk, no circle behind it)
     casterSpotlight.innerHTML = `
