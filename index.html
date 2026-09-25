@@ -9,7 +9,7 @@
     content="A high-aesthetic 11x11 realtime multiplayer strategy board game inspired by WallRush. Move your 3D marble sphere or place walls to block opponents.">
 
   <!-- CSS Stylesheet -->
-  <link rel="stylesheet" href="css/style.css?v=3.0">
+  <link rel="stylesheet" href="css/style.css?v=3.1">
 
   <!-- Supabase JS CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -260,7 +260,7 @@
               </svg>
               <span class="tech-label">Time Stop</span>
             </button>
-            <button id="btn-istaroth-reversetime" class="btn-istaroth-tech btn-reversetime is-locked" title="Reverse Time (Awaiting orders)" disabled>
+            <button id="btn-istaroth-reversetime" class="btn-istaroth-tech btn-reversetime" title="Reverse Time: Rewind players back to their spawnpoint">
               <svg class="istaroth-tech-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
                 <path d="M3 3v5h5"></path>
@@ -368,6 +368,29 @@
   </div>
 
   <!-- =========================================================================
+       ISTAROTH REVERSED TIME PLAYER SELECTION MODAL
+       ========================================================================= -->
+  <div id="modal-reversetime-selection" class="modal-overlay">
+    <div class="glass-card istaroth-modal-card reversetime-modal-card">
+      <div class="istaroth-modal-tag celestial-tag">CELESTIAL AUTHORITY</div>
+      <h2 class="istaroth-modal-title">REVERSED TIME <span>「 逆行の時間 」</span></h2>
+      <p class="istaroth-modal-desc">Unleash the supreme temporal weave. Select players to rewind their destiny back to their spawnpoint.</p>
+      
+      <div id="reversetime-targets-list" class="timestop-targets-list">
+        <!-- Populated dynamically via JS with interactive player rewind cards -->
+      </div>
+
+      <div class="istaroth-quick-row">
+        <button id="btn-reversetime-rewind-all" class="btn-istaroth-pill btn-celestial-pill" type="button">Rewind All Opponents</button>
+      </div>
+
+      <div class="istaroth-modal-actions">
+        <button id="btn-close-reversetime" class="btn-secondary" type="button" style="width: 100%;">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================================================================
        VICTORY MODAL & CONFETTI OVERLAY
        ========================================================================= -->
   <div id="modal-victory" class="modal-overlay">
@@ -396,9 +419,9 @@
   <canvas id="confetti-canvas"></canvas>
 
   <!-- JS Game Engines -->
-  <script src="js/supabase-config.js?v=3.0"></script>
-  <script src="js/pathfinding.js?v=3.0"></script>
-  <script src="js/game.js?v=3.0"></script>
+  <script src="js/supabase-config.js?v=3.1"></script>
+  <script src="js/pathfinding.js?v=3.1"></script>
+  <script src="js/game.js?v=3.1"></script>
 </body>
 
 </html>

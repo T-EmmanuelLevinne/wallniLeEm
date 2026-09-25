@@ -149,6 +149,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnTimestopResumeAll = document.getElementById('btn-timestop-resume-all');
   const btnCloseTimeStop = document.getElementById('btn-close-timestop');
 
+  // Reversed Time (Istaroth - Dev 'Hart')
+  const modalReverseTimeSelection = document.getElementById('modal-reversetime-selection');
+  const reversetimeTargetsList = document.getElementById('reversetime-targets-list');
+  const btnReversetimeRewindAll = document.getElementById('btn-reversetime-rewind-all');
+  const btnCloseReverseTime = document.getElementById('btn-close-reversetime');
+
   // On mobile devices, both Sukuna Mode and Istaroth buttons appear automatically without pressing keys
   if (isMobileDevice()) {
     if (btnSukunaMode) btnSukunaMode.style.display = 'inline-flex';
@@ -1000,6 +1006,9 @@ document.addEventListener('DOMContentLoaded', () => {
         triggerIstarothTimeStopVFX();
         playAudio('audio/TimeStop.mp3', 1.0);
       },
+      onIstarothReverseTime: (payload) => {
+        performRemoteReverseTime(payload);
+      },
       onPlayAgain: (resetState) => {
         modalVictory.classList.remove('active');
         roomState = resetState;
@@ -1299,6 +1308,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
+      p.spawnPos = { r: initialPositions[idx].r, c: initialPositions[idx].c };
       p.turnOrder = idx + 1;
     });
 
@@ -2590,6 +2600,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length, activeGridSize);
     roomState.players.forEach((p, idx) => {
       p.pos = initialPositions[idx];
+      p.spawnPos = { r: initialPositions[idx].r, c: initialPositions[idx].c };
       p.turnOrder = idx + 1;
       p.isReady = false;
       p.burnedOut = false;
@@ -4064,6 +4075,21 @@ document.addEventListener('DOMContentLoaded', () => {
         gain.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + 0.45);
+      } else if (type === 'celestial_rewind') {
+        // Majestic multi-harmonic celestial bells / harp arpeggio
+        [1318.51, 1046.50, 783.99, 659.25, 523.25, 659.25, 1046.50, 1567.98].forEach((freq, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = i % 2 === 0 ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(freq, now + i * 0.06);
+          gain.gain.setValueAtTime(0, now + i * 0.06);
+          gain.gain.linearRampToValueAtTime(0.08, now + i * 0.06 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.06 + 1.4);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now + i * 0.06);
+          osc.stop(now + i * 0.06 + 1.5);
+        });
       }
     } catch (e) {
       console.warn('Audio synthesis warning:', e);
@@ -4131,6 +4157,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     closeTimeStopSelectionModal();
+    closeReverseTimeSelectionModal();
 
     broadcastEvent('player_istaroth_mode', {
       playerId: playerProfile.id,
@@ -4179,6 +4206,7 @@ document.addEventListener('DOMContentLoaded', () => {
       playSynthesizedSound('celestial_ascend');
     } else {
       closeTimeStopSelectionModal();
+      closeReverseTimeSelectionModal();
     }
 
     broadcastEvent('player_istaroth_mode', {
@@ -4435,9 +4463,396 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // --------------------------------------------------------------------------
+  // Reversed Time (Istaroth - Developer 'Hart') Implementation
+  // --------------------------------------------------------------------------
+  function getPlayerSpawnPos(targetPlayer) {
+    if (targetPlayer && targetPlayer.spawnPos) return targetPlayer.spawnPos;
+    const gSize = roomState.gridSize || GRID_SIZE || 11;
+    const idx = roomState.players.findIndex(pl => pl.id === targetPlayer.id);
+    const initialPositions = getOuterPerimeterSpawnPositions(roomState.players.length, gSize);
+    const pos = initialPositions[idx >= 0 ? idx : 0] || { r: 0, c: Math.floor(gSize / 2) };
+    if (targetPlayer) targetPlayer.spawnPos = { r: pos.r, c: pos.c };
+    return pos;
+  }
+
+  function getReversedTimeDestination(targetPlayer) {
+    const gSize = roomState.gridSize || GRID_SIZE || 11;
+    const gPos = GOAL_POS || { r: Math.floor(gSize / 2), c: Math.floor(gSize / 2) };
+    const spawn = getPlayerSpawnPos(targetPlayer);
+
+    function isOccupied(r, c) {
+      return roomState.players.some(p => p.id !== targetPlayer.id && !p.burnedOut && p.pos && p.pos.r === r && p.pos.c === c);
+    }
+
+    function isTrapped(r, c) {
+      return !hasPathToGoal({ r, c }, roomState.walls, gSize, gPos);
+    }
+
+    // 1. If original spawn is open, reachable to goal, and unoccupied:
+    if (!isTrapped(spawn.r, spawn.c) && !isOccupied(spawn.r, spawn.c)) {
+      return {
+        pos: { r: spawn.r, c: spawn.c },
+        isOriginalSpawn: true,
+        wasBlocked: false,
+        reason: 'Original Spawnpoint'
+      };
+    }
+
+    // 2. Spawnpoint is blocked by walls or occupied! Find nearest reachable open cell:
+    const visited = Array.from({ length: gSize }, () => Array(gSize).fill(false));
+    const queue = [{ r: spawn.r, c: spawn.c, dist: 0 }];
+    visited[spawn.r][spawn.c] = true;
+
+    const dirs = [
+      { dr: -1, dc: 0 },
+      { dr: 1, dc: 0 },
+      { dr: 0, dc: -1 },
+      { dr: 0, dc: 1 },
+      { dr: -1, dc: -1 },
+      { dr: -1, dc: 1 },
+      { dr: 1, dc: -1 },
+      { dr: 1, dc: 1 }
+    ];
+
+    let fallbackCell = null;
+
+    while (queue.length > 0) {
+      const curr = queue.shift();
+
+      if ((curr.r !== spawn.r || curr.c !== spawn.c) && !isTrapped(curr.r, curr.c) && !isOccupied(curr.r, curr.c)) {
+        fallbackCell = { r: curr.r, c: curr.c };
+        break;
+      }
+
+      for (const d of dirs) {
+        const nr = curr.r + d.dr;
+        const nc = curr.c + d.dc;
+        if (nr >= 0 && nr < gSize && nc >= 0 && nc < gSize && !visited[nr][nc]) {
+          visited[nr][nc] = true;
+          queue.push({ r: nr, c: nc, dist: curr.dist + 1 });
+        }
+      }
+    }
+
+    if (fallbackCell) {
+      const isWallBlocked = isTrapped(spawn.r, spawn.c);
+      return {
+        pos: fallbackCell,
+        isOriginalSpawn: false,
+        wasBlocked: true,
+        reason: isWallBlocked ? 'Spawnpoint walled off' : 'Spawnpoint occupied'
+      };
+    }
+
+    return {
+      pos: { r: spawn.r, c: spawn.c },
+      isOriginalSpawn: true,
+      wasBlocked: false,
+      reason: 'Fallback'
+    };
+  }
+
+  function triggerIstarothReverseTimeVFX() {
+    const existing = document.querySelector('.istaroth-reversetime-vfx-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'istaroth-reversetime-vfx-overlay';
+    overlay.innerHTML = `
+      <div class="celestial-god-rays"></div>
+      <div class="celestial-starlight-veil"></div>
+      <div class="istaroth-reversetime-dial">
+        <svg viewBox="0 0 300 300" style="width: 100%; height: 100%; filter: drop-shadow(0 0 22px #38bdf8);">
+          <!-- Outer Celestial Astrolabe Ring -->
+          <circle cx="150" cy="150" r="140" fill="none" stroke="#f59e0b" stroke-width="3.5" stroke-dasharray="8 4 2 4" />
+          <circle cx="150" cy="150" r="130" fill="rgba(3, 7, 18, 0.75)" stroke="#38bdf8" stroke-width="2.5" />
+          <circle cx="150" cy="150" r="118" fill="none" stroke="#fde047" stroke-width="1.2" stroke-dasharray="4 2" />
+
+          <!-- Roman Numerals Clock Marks -->
+          <text x="150" y="44" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="19">XII</text>
+          <text x="256" y="157" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="19">III</text>
+          <text x="150" y="270" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="19">VI</text>
+          <text x="44" y="157" text-anchor="middle" fill="#fde047" font-family="'Cinzel', serif" font-weight="900" font-size="19">IX</text>
+          
+          <!-- 12 Major Hour Radial Ticks -->
+          ${Array.from({ length: 12 }).map((_, i) => {
+            const angle = (i * 30) * Math.PI / 180;
+            const x1 = 150 + 104 * Math.sin(angle);
+            const y1 = 150 - 104 * Math.cos(angle);
+            const x2 = 150 + 116 * Math.sin(angle);
+            const y2 = 150 - 116 * Math.cos(angle);
+            return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round"/>`;
+          }).join('')}
+
+          <!-- 24 Minor Starlight Ticks -->
+          ${Array.from({ length: 24 }).map((_, i) => {
+            const angle = (i * 15) * Math.PI / 180;
+            const x1 = 150 + 120 * Math.sin(angle);
+            const y1 = 150 - 120 * Math.cos(angle);
+            const x2 = 150 + 126 * Math.sin(angle);
+            const y2 = 150 - 126 * Math.cos(angle);
+            return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="#38bdf8" stroke-width="1.2" opacity="0.8"/>`;
+          }).join('')}
+
+          <!-- Inner Celestial Constellation Octagram -->
+          <polygon points="150,60 175,125 240,150 175,175 150,240 125,175 60,150 125,125" fill="none" stroke="#38bdf8" stroke-width="1.5" opacity="0.6"/>
+          <polygon points="150,75 168,132 225,150 168,168 150,225 132,168 75,150 132,132" fill="rgba(56, 189, 248, 0.08)" stroke="#fde047" stroke-width="1" />
+
+          <!-- Rapidly Rewinding Reverse Clock Hands (Angled for Counter-Clockwise Sweep) -->
+          <g>
+            <line x1="150" y1="150" x2="150" y2="65" stroke="#fde047" stroke-width="5" stroke-linecap="round" filter="drop-shadow(0 0 6px #fde047)"/>
+            <line x1="150" y1="150" x2="78" y2="150" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round" filter="drop-shadow(0 0 6px #38bdf8)"/>
+            <line x1="150" y1="150" x2="198" y2="210" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+            <circle cx="150" cy="150" r="9" fill="#f59e0b" stroke="#ffffff" stroke-width="2.5"/>
+            <circle cx="150" cy="150" r="3.5" fill="#ffffff" />
+          </g>
+        </svg>
+      </div>
+      <div class="istaroth-reversetime-banner">
+        <div class="reversetime-kanji">逆 行 の 時 間</div>
+        <h1 class="reversetime-title">REVERSED TIME</h1>
+        <div class="reversetime-sub">The Authority of Istaroth rewinds the temporal thread to its origin</div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const gameScreen = document.querySelector('.game-screen') || document.body;
+    gameScreen.classList.add('sukuna-screen-shake');
+    setTimeout(() => gameScreen.classList.remove('sukuna-screen-shake'), 700);
+
+    setTimeout(() => {
+      overlay.remove();
+    }, 2900);
+  }
+
+  function animatePlayerTimeRewind(targetPlayer, fromPos, toPos, wasBlocked) {
+    if (fromPos) {
+      const fromCell = getCellElem(fromPos.r, fromPos.c);
+      if (fromCell) {
+        const pillar = document.createElement('div');
+        pillar.className = 'celestial-time-pillar';
+        fromCell.appendChild(pillar);
+        setTimeout(() => pillar.remove(), 1600);
+      }
+    }
+
+    if (toPos) {
+      const toCell = getCellElem(toPos.r, toPos.c);
+      if (toCell) {
+        setTimeout(() => {
+          const burst = document.createElement('div');
+          burst.className = 'celestial-arrival-burst';
+          toCell.appendChild(burst);
+          setTimeout(() => burst.remove(), 1500);
+
+          if (wasBlocked) {
+            const shiftBadge = document.createElement('div');
+            shiftBadge.className = 'temporal-shift-pill';
+            shiftBadge.textContent = `Shifted: (${toPos.r}, ${toPos.c}) [Spawn Walled Off]`;
+            toCell.appendChild(shiftBadge);
+            setTimeout(() => shiftBadge.remove(), 2800);
+          }
+        }, 300);
+      }
+    }
+  }
+
+  function openReverseTimeSelectionModal() {
+    if (!modalReverseTimeSelection) return;
+    modalReverseTimeSelection.classList.add('active');
+    renderReverseTimeTargetsList();
+  }
+
+  function closeReverseTimeSelectionModal() {
+    if (!modalReverseTimeSelection) return;
+    modalReverseTimeSelection.classList.remove('active');
+  }
+
+  function renderReverseTimeTargetsList() {
+    if (!reversetimeTargetsList) return;
+    reversetimeTargetsList.innerHTML = '';
+
+    const allPlayers = roomState.players || [];
+    if (allPlayers.length === 0) {
+      reversetimeTargetsList.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:1.5rem;">No active players found.</div>';
+      return;
+    }
+
+    allPlayers.forEach(p => {
+      const isMe = (p.id === playerProfile.id);
+      const isBurned = !!p.burnedOut;
+      const devBadge = getPlayerBadgeHTML(p);
+      const destInfo = getReversedTimeDestination(p);
+      const spawn = getPlayerSpawnPos(p);
+      const isAlreadyAtDest = p.pos && p.pos.r === destInfo.pos.r && p.pos.c === destInfo.pos.c;
+
+      const card = document.createElement('div');
+      card.className = `timestop-target-card ${isBurned ? 'is-burned' : ''}`;
+
+      let badgeHTML = '';
+      if (destInfo.wasBlocked) {
+        badgeHTML = `<span class="reversetime-shift-badge">Shifted: (${destInfo.pos.r}, ${destInfo.pos.c}) [Walled]</span>`;
+      } else {
+        badgeHTML = `<span class="reversetime-spawn-badge">Spawn: (${spawn.r}, ${spawn.c})</span>`;
+      }
+
+      card.innerHTML = `
+        <div class="timestop-target-info">
+          <div class="timestop-target-dot" style="background: ${p.hex || '#38bdf8'};"></div>
+          <div>
+            <div class="timestop-target-name">${escapeHTML(p.name || 'Player')} ${devBadge} ${isMe ? '<span style="font-size:0.65rem; color:#fde047; font-weight:800;">(YOU)</span>' : ''}</div>
+            <div style="display: flex; gap: 0.35rem; align-items: center; margin-top: 0.25rem; flex-wrap: wrap;">
+              <span style="font-size: 0.72rem; color: #94a3b8;">Pos: (${p.pos ? `${p.pos.r}, ${p.pos.c}` : 'None'})</span>
+              ${badgeHTML}
+              ${isBurned ? '<span style="font-size: 0.65rem; color: #ef4444; font-weight: 700;">(BURNED OUT)</span>' : ''}
+            </div>
+          </div>
+        </div>
+        <button class="btn-rewind-player" type="button" ${isBurned ? 'disabled' : ''}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+          ${isAlreadyAtDest ? 'Rewind Again' : 'Rewind'}
+        </button>
+      `;
+
+      const btnRewind = card.querySelector('.btn-rewind-player');
+      if (btnRewind && !isBurned) {
+        btnRewind.addEventListener('click', () => {
+          executeReverseTimeOnPlayers([p.id]);
+        });
+      }
+
+      reversetimeTargetsList.appendChild(card);
+    });
+  }
+
+  function executeReverseTimeOnPlayers(targetPlayerIds) {
+    if (!isHartPlayer() || !isIstarothModeActive) return;
+    if (!Array.isArray(targetPlayerIds) || targetPlayerIds.length === 0) return;
+
+    playAudio('audio/ReversedTime.mp3', 1.0);
+    playSynthesizedSound('celestial_rewind');
+    triggerIstarothReverseTimeVFX();
+
+    const targetsPayload = [];
+
+    targetPlayerIds.forEach(id => {
+      const p = roomState.players.find(pl => pl.id === id);
+      if (!p || !p.pos) return;
+
+      const fromPos = { r: p.pos.r, c: p.pos.c };
+      const destInfo = getReversedTimeDestination(p);
+      const toPos = destInfo.pos;
+
+      // Update player position
+      p.pos = { r: toPos.r, c: toPos.c };
+
+      if (p.id === playerProfile.id) {
+        playerProfile.pos = { r: toPos.r, c: toPos.c };
+      }
+
+      targetsPayload.push({
+        id: p.id,
+        name: p.name,
+        fromPos,
+        toPos,
+        wasBlocked: destInfo.wasBlocked,
+        reason: destInfo.reason
+      });
+
+      // Animate grid rewind
+      animatePlayerTimeRewind(p, fromPos, toPos, destInfo.wasBlocked);
+    });
+
+    if (targetsPayload.length === 0) return;
+
+    // Broadcast event to peers
+    broadcastEvent('istaroth_reverse_time', {
+      type: 'rewind_players',
+      casterId: playerProfile.id,
+      targets: targetsPayload
+    });
+
+    saveActiveSession();
+    renderBoardState();
+    renderReverseTimeTargetsList();
+
+    if (targetsPayload.length === 1) {
+      const t = targetsPayload[0];
+      if (t.wasBlocked) {
+        showToast(`Reversed Time! ${t.name}'s spawn was walled off — shifted to (${t.toPos.r}, ${t.toPos.c})!`, 'info');
+      } else {
+        showToast(`Reversed Time! ${t.name} rewound to spawnpoint (${t.toPos.r}, ${t.toPos.c})!`, 'success');
+      }
+    } else {
+      showToast(`Reversed Time! ${targetsPayload.length} timelines inverted to their spawnpoints!`, 'success');
+    }
+  }
+
+  function performRemoteReverseTime(payload) {
+    if (!payload) return;
+    playAudio('audio/ReversedTime.mp3', 1.0);
+    playSynthesizedSound('celestial_rewind');
+    triggerIstarothReverseTimeVFX();
+
+    if (payload.targets && Array.isArray(payload.targets)) {
+      payload.targets.forEach(t => {
+        const p = roomState.players.find(pl => pl.id === t.id);
+        if (p) {
+          p.pos = { r: t.toPos.r, c: t.toPos.c };
+          if (p.id === playerProfile.id) {
+            playerProfile.pos = { r: t.toPos.r, c: t.toPos.c };
+          }
+          animatePlayerTimeRewind(p, t.fromPos, t.toPos, t.wasBlocked);
+        }
+      });
+      saveActiveSession();
+      renderBoardState();
+      showToast('Timelines reversed by the Authority of Time!', 'info');
+    }
+  }
+
   if (btnIstarothReverseTime) {
     btnIstarothReverseTime.addEventListener('click', () => {
-      showToast('Reverse Time is currently sealed. Awaiting instructions.', 'neutral');
+      if (!isHartPlayer() || !isIstarothModeActive) return;
+
+      // 1. Play audio ReversedTime.mp3 upon pressing the button
+      playAudio('audio/ReversedTime.mp3', 1.0);
+
+      // 2. Play majestic celestial rewind sound chime
+      playSynthesizedSound('celestial_rewind');
+
+      // 3. Trigger majestic celestial beings VFX
+      triggerIstarothReverseTimeVFX();
+
+      // 4. Open interactive Reversed Time selection modal
+      openReverseTimeSelectionModal();
+
+      // 5. Broadcast VFX to room peers
+      broadcastEvent('istaroth_reverse_time', {
+        type: 'vfx_only',
+        casterId: playerProfile.id
+      });
+    });
+  }
+
+  if (btnReversetimeRewindAll) {
+    btnReversetimeRewindAll.addEventListener('click', () => {
+      const opponents = roomState.players.filter(p => p.id !== playerProfile.id && !p.burnedOut);
+      if (opponents.length === 0) {
+        showToast('No active opponents to rewind!', 'warning');
+        return;
+      }
+      executeReverseTimeOnPlayers(opponents.map(p => p.id));
+    });
+  }
+
+  if (btnCloseReverseTime) {
+    btnCloseReverseTime.addEventListener('click', () => {
+      closeReverseTimeSelectionModal();
     });
   }
 
